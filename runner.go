@@ -56,5 +56,5 @@ func GenerateConverterFile(fileName string, c GenerateConfig) error {
 		return err
 	}
 
-	return ioutil.WriteFile(fileName, file, os.ModePerm)
+	return ioutil.WriteFile(fileName, file, 0644)
 }

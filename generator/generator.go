@@ -25,6 +25,7 @@ type methodDefinition struct {
 	IgnoredFields   map[string]struct{}
 	IdentityMapping map[string]struct{}
 	MatchIgnoreCase bool
+	NoStrict        bool
 
 	Jen jen.Code
 
@@ -81,6 +82,7 @@ func (g *generator) registerMethod(methodType *types.Func, methodComments commen
 		MatchIgnoreCase:  methodComments.MatchIgnoreCase,
 		IgnoredFields:    methodComments.IgnoredFields,
 		IdentityMapping:  methodComments.IdentityMapping,
+		NoStrict:         methodComments.NoStrict,
 		ReturnError:      returnError,
 		ReturnTypeOrigin: methodType.FullName(),
 	}
@@ -94,7 +96,7 @@ func (g *generator) registerMethod(methodType *types.Func, methodComments commen
 }
 
 func (g *generator) createMethods() error {
-	methods := []*methodDefinition{}
+	var methods []*methodDefinition
 	for _, method := range g.lookup {
 		methods = append(methods, method)
 	}
@@ -127,7 +129,7 @@ func (g *generator) createMethods() error {
 }
 
 func (g *generator) appendToFile() {
-	methods := []*methodDefinition{}
+	var methods []*methodDefinition
 	for _, method := range g.lookup {
 		methods = append(methods, method)
 	}
@@ -156,6 +158,7 @@ func (g *generator) buildMethod(method *methodDefinition) *builder.Error {
 		IdentityMapping: method.IdentityMapping,
 		MatchIgnoreCase: method.MatchIgnoreCase,
 		TargetType:      method.Target,
+		NoStrict:        method.NoStrict,
 		Signature:       xtype.Signature{Source: method.Source.T.String(), Target: method.Target.T.String()},
 	}
 	stmt, newID, err := g.buildNoLookup(ctx, xtype.VariableID(sourceID.Clone()), source, target)
@@ -194,7 +197,7 @@ func (g *generator) Build(ctx *builder.MethodContext, sourceID *xtype.JenID, sou
 	}
 
 	if ok {
-		params := []jen.Code{}
+		var params []jen.Code
 		if method.SelfAsFirstParam {
 			params = append(params, jen.Id(xtype.ThisVar))
 		}
@@ -241,6 +244,7 @@ func (g *generator) Build(ctx *builder.MethodContext, sourceID *xtype.JenID, sou
 			method.Mapping = ctx.Mapping
 			method.MatchIgnoreCase = ctx.MatchIgnoreCase
 			method.IgnoredFields = ctx.IgnoredFields
+			method.NoStrict = ctx.NoStrict
 		}
 
 		g.lookup[xtype.Signature{Source: source.T.String(), Target: target.T.String()}] = method

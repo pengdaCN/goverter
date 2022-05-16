@@ -30,4 +30,5 @@ type MethodContext struct {
 	TargetType      *xtype.Type
 	PointerChange   bool
 	MatchIgnoreCase bool
+	NoStrict        bool
 }

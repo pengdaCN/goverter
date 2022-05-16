@@ -42,7 +42,7 @@ func ToString(err *Error) string {
 	}
 
 	end := 2 + (len(err.Path) * 4) - 1
-	sourcePath := (len(err.Path) * 2)
+	sourcePath := len(err.Path) * 2
 	targetPath := sourcePath + 1
 
 	matrix := make([][]rune, end+1)

@@ -3,6 +3,7 @@ package builder
 import (
 	"fmt"
 	"go/types"
+	"log"
 	"strings"
 
 	"github.com/dave/jennifer/jen"
@@ -58,6 +59,11 @@ func (*Struct) Build(gen Generator, ctx *MethodContext, sourceID *xtype.JenID, s
 
 		nextID, nextSource, mapStmt, lift, err := mapField(gen, ctx, targetField, sourceID, source, target)
 		if err != nil {
+			if ctx.NoStrict {
+				log.Println("warn:", targetField.Name(), "not assign")
+				continue
+			}
+
 			return nil, nil, err
 		}
 		stmt = append(stmt, mapStmt...)
@@ -73,8 +79,8 @@ func (*Struct) Build(gen Generator, ctx *MethodContext, sourceID *xtype.JenID, s
 	return stmt, xtype.VariableID(jen.Id(name)), nil
 }
 
-func mapField(gen Generator, ctx *MethodContext, targetField *types.Var, sourceID *xtype.JenID, source, target *xtype.Type) (*jen.Statement, *xtype.Type, []jen.Code, []*Path, *Error) {
-	lift := []*Path{}
+func mapField(_ Generator, ctx *MethodContext, targetField *types.Var, sourceID *xtype.JenID, source, target *xtype.Type) (*jen.Statement, *xtype.Type, []jen.Code, []*Path, *Error) {
+	var lift []*Path
 
 	mappedName, hasOverride := ctx.Mapping[targetField.Name()]
 	if ctx.Signature.Target != target.T.String() || !hasOverride {
@@ -103,7 +109,7 @@ func mapField(gen Generator, ctx *MethodContext, targetField *types.Var, sourceI
 	path := strings.Split(mappedName, ".")
 	var condition *jen.Statement
 
-	stmt := []jen.Code{}
+	var stmt []jen.Code
 	nextID := sourceID.Code
 	nextSource := source
 	for i := 0; i < len(path); i++ {

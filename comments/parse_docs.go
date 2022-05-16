@@ -49,6 +49,7 @@ type Method struct {
 	MatchIgnoreCase bool
 	// target to source
 	IdentityMapping map[string]struct{}
+	NoStrict        bool
 }
 
 // ParseDocs parses the docs for the given pattern.
@@ -62,7 +63,7 @@ func ParseDocs(config ParseDocsConfig) ([]Converter, error) {
 	if err != nil {
 		return nil, err
 	}
-	mapping := []Converter{}
+	var mapping []Converter
 	for _, pkg := range pkgs {
 		if len(pkg.Errors) > 0 {
 			return nil, pkg.Errors[0]
@@ -232,6 +233,9 @@ func parseMethodComment(comment string) (Method, error) {
 					return m, fmt.Errorf("invalid %s:matchIgnoreCase, parameters not supported", prefix)
 				}
 				m.MatchIgnoreCase = true
+				continue
+			case "noStrict":
+				m.NoStrict = true
 				continue
 			}
 			return m, fmt.Errorf("unknown %s comment: %s", prefix, line)
