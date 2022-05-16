@@ -50,6 +50,18 @@ type StructField struct {
 // an error if it is not found. This method will also return a detailed error if matchIgnoreCase
 // is enabled and there are multiple non-exact matches.
 func (t Type) StructField(name string, ignoreCase bool, ignore map[string]struct{}) (*StructField, error) {
+	return t.innerStructField(name, ignoreCase, ignore, 1)
+}
+
+const (
+	maxCycleLevel = 1000
+)
+
+func (t Type) innerStructField(name string, ignoreCase bool, ignore map[string]struct{}, level int) (*StructField, error) {
+	if maxCycleLevel < level {
+		panic("the maximum recursive limit is exceeded")
+	}
+
 	if !t.Struct {
 		panic("trying to get field of non struct")
 	}
@@ -61,9 +73,8 @@ func (t Type) StructField(name string, ignoreCase bool, ignore map[string]struct
 			continue
 		}
 
-		// TODO 对递归层数做限制
 		if m.Embedded() {
-			field, err := TypeOf(m.Type()).StructField(name, ignoreCase, nil)
+			field, err := TypeOf(m.Type()).innerStructField(name, ignoreCase, nil, level+1)
 			if err == nil {
 				return field, nil
 			}
