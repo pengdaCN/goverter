@@ -60,6 +60,15 @@ func (t Type) StructField(name string, ignoreCase bool, ignore map[string]struct
 		if _, ignored := ignore[m.Name()]; ignored {
 			continue
 		}
+
+		// TODO 对递归层数做限制
+		if m.Embedded() {
+			field, err := TypeOf(m.Type()).StructField(name, ignoreCase, nil)
+			if err == nil {
+				return field, nil
+			}
+		}
+
 		if m.Name() == name {
 			// exact match takes precedence over case-insensitive match
 			return &StructField{Name: m.Name(), Type: TypeOf(m.Type())}, nil
