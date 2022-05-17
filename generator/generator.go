@@ -238,13 +238,13 @@ func (g *generator) Build(ctx *builder.MethodContext, sourceID *xtype.JenID, sou
 			Mapping:       map[string]string{},
 			IgnoredFields: map[string]struct{}{},
 			Call:          jen.Id(xtype.ThisVar).Dot(name),
+			NoStrict:      ctx.NoStrict,
 		}
 		if ctx.PointerChange {
 			ctx.PointerChange = false
 			method.Mapping = ctx.Mapping
 			method.MatchIgnoreCase = ctx.MatchIgnoreCase
 			method.IgnoredFields = ctx.IgnoredFields
-			method.NoStrict = ctx.NoStrict
 		}
 
 		g.lookup[xtype.Signature{Source: source.T.String(), Target: target.T.String()}] = method

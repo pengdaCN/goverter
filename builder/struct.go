@@ -31,6 +31,11 @@ func (*Struct) Build(gen Generator, ctx *MethodContext, sourceID *xtype.JenID, s
 			continue
 		}
 		if !targetField.Exported() {
+			if ctx.NoStrict {
+				log.Println("warn: Cannot set value for unexported field", strings.Join([]string{target.T.String(), targetField.Name()}, "."))
+				continue
+			}
+
 			cause := unexportedStructError(targetField.Name(), source.T.String(), target.T.String())
 			return nil, nil, NewError(cause).Lift(&Path{
 				Prefix:     ".",
@@ -60,7 +65,7 @@ func (*Struct) Build(gen Generator, ctx *MethodContext, sourceID *xtype.JenID, s
 		nextID, nextSource, mapStmt, lift, err := mapField(gen, ctx, targetField, sourceID, source, target)
 		if err != nil {
 			if ctx.NoStrict {
-				log.Println("warn:", targetField.Name(), "not assign")
+				log.Println("warn:", strings.Join([]string{target.T.String(), targetField.Name()}, "."), "not assign")
 				continue
 			}
 
