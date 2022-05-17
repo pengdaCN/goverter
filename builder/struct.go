@@ -32,7 +32,7 @@ func (*Struct) Build(gen Generator, ctx *MethodContext, sourceID *xtype.JenID, s
 		}
 		if !targetField.Exported() {
 			if ctx.NoStrict {
-				log.Println("warn: Cannot set value for unexported field", strings.Join([]string{target.T.String(), targetField.Name()}, "."))
+				log.Println("warn: Cannot set value for unexported field:", strings.Join([]string{target.T.String(), targetField.Name()}, "."))
 				continue
 			}
 
