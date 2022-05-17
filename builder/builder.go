@@ -31,4 +31,5 @@ type MethodContext struct {
 	PointerChange   bool
 	MatchIgnoreCase bool
 	NoStrict        bool
+	ZeroCopyStruct  bool
 }

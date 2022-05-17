@@ -67,7 +67,7 @@ func Generate(pattern string, mapping []comments.Converter, config Config) (*jen
 		// we checked in comments, that it is an interface
 		for i := 0; i < interf.NumMethods(); i++ {
 			method := interf.Method(i)
-			converterMethod := comments.Method{}
+			var converterMethod comments.Method
 
 			if m, ok := converter.Methods[method.Name()]; ok {
 				converterMethod = m

@@ -84,6 +84,7 @@ func (*Struct) Build(gen Generator, ctx *MethodContext, sourceID *xtype.JenID, s
 	return stmt, xtype.VariableID(jen.Id(name)), nil
 }
 
+// TODO 对错误进行处理
 func mapField(_ Generator, ctx *MethodContext, targetField *types.Var, sourceID *xtype.JenID, source, target *xtype.Type) (*jen.Statement, *xtype.Type, []jen.Code, []*Path, *Error) {
 	var lift []*Path
 

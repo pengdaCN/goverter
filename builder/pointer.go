@@ -29,6 +29,7 @@ func (*Pointer) Build(gen Generator, ctx *MethodContext, sourceID *xtype.JenID, 
 		})
 	}
 
+	// TODO 优化指针问题
 	ifBlock := nextBlock
 	if id.Variable {
 		ifBlock = append(ifBlock, jen.Id(outerVar).Op("=").Op("&").Add(id.Code.Clone()))

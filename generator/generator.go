@@ -26,6 +26,7 @@ type methodDefinition struct {
 	IdentityMapping map[string]struct{}
 	MatchIgnoreCase bool
 	NoStrict        bool
+	ZeroCopyStruct  bool
 
 	Jen jen.Code
 
@@ -219,7 +220,8 @@ func (g *generator) Build(ctx *builder.MethodContext, sourceID *xtype.JenID, sou
 				jen.List(jen.Id(name), jen.Id("err")).Op(":=").Add(method.Call.Clone().Call(params...)),
 				jen.If(jen.Id("err").Op("!=").Nil()).Block(
 					jen.Var().Id(innerName).Add(ctx.TargetType.TypeAsJen()),
-					jen.Return(jen.Id(innerName), jen.Id("err"))),
+					jen.Return(jen.Id(innerName), jen.Id("err")),
+				),
 			}
 			return stmt, xtype.VariableID(jen.Id(name)), nil
 		}
@@ -239,6 +241,8 @@ func (g *generator) Build(ctx *builder.MethodContext, sourceID *xtype.JenID, sou
 			IgnoredFields: map[string]struct{}{},
 			Call:          jen.Id(xtype.ThisVar).Dot(name),
 			NoStrict:      ctx.NoStrict,
+			// TODO 考虑是否需要设置
+			ZeroCopyStruct: ctx.ZeroCopyStruct,
 		}
 		if ctx.PointerChange {
 			ctx.PointerChange = false
@@ -247,6 +251,7 @@ func (g *generator) Build(ctx *builder.MethodContext, sourceID *xtype.JenID, sou
 			method.IgnoredFields = ctx.IgnoredFields
 		}
 
+		// TODO zeroCopyStruct 特殊处理
 		g.lookup[xtype.Signature{Source: source.T.String(), Target: target.T.String()}] = method
 		g.namer.Register(method.Name)
 		if err := g.buildMethod(method); err != nil {
