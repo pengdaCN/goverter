@@ -9,7 +9,7 @@ import (
 type Pointer struct{}
 
 // Matches returns true, if the builder can create handle the given types.
-func (*Pointer) Matches(source, target *xtype.Type) bool {
+func (*Pointer) Matches(_ *MethodContext, source, target *xtype.Type) bool {
 	return source.Pointer && target.Pointer
 }
 

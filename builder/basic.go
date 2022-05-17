@@ -9,7 +9,7 @@ import (
 type Basic struct{}
 
 // Matches returns true, if the builder can create handle the given types.
-func (*Basic) Matches(source, target *xtype.Type) bool {
+func (*Basic) Matches(_ *MethodContext, source, target *xtype.Type) bool {
 	return source.Basic && target.Basic &&
 		source.BasicType.Kind() == target.BasicType.Kind()
 }

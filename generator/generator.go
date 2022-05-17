@@ -183,7 +183,7 @@ func (g *generator) buildMethod(method *methodDefinition) *builder.Error {
 
 func (g *generator) buildNoLookup(ctx *builder.MethodContext, sourceID *xtype.JenID, source, target *xtype.Type) ([]jen.Code, *xtype.JenID, *builder.Error) {
 	for _, rule := range BuildSteps {
-		if rule.Matches(source, target) {
+		if rule.Matches(ctx, source, target) {
 			return rule.Build(g, ctx, sourceID, source, target)
 		}
 	}
@@ -262,7 +262,7 @@ func (g *generator) Build(ctx *builder.MethodContext, sourceID *xtype.JenID, sou
 	}
 
 	for _, rule := range BuildSteps {
-		if rule.Matches(source, target) {
+		if rule.Matches(ctx, source, target) {
 			return rule.Build(g, ctx, sourceID, source, target)
 		}
 	}
