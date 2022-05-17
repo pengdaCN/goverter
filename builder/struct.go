@@ -65,7 +65,7 @@ func (*Struct) Build(gen Generator, ctx *MethodContext, sourceID *xtype.JenID, s
 		nextID, nextSource, mapStmt, lift, err := mapField(gen, ctx, targetField, sourceID, source, target)
 		if err != nil {
 			if ctx.NoStrict {
-				log.Println("warn:", strings.Join([]string{target.T.String(), targetField.Name()}, "."), "not assign")
+				log.Println("Cannot match the target field with the source entry: :", strings.Join([]string{target.T.String(), targetField.Name()}, "."))
 				continue
 			}
 
