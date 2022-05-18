@@ -32,4 +32,5 @@ type MethodContext struct {
 	MatchIgnoreCase bool
 	NoStrict        bool
 	ZeroCopyStruct  bool
+	TargetID        *xtype.JenID
 }

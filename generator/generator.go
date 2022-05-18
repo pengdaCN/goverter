@@ -145,6 +145,8 @@ func (g *generator) appendToFile() {
 func (g *generator) buildMethod(method *methodDefinition) *builder.Error {
 	sourceID := jen.Id("source")
 	source := method.Source
+
+	// TODO zeroCopyStruct
 	target := method.Target
 
 	returns := []jen.Code{target.TypeAsJen()}
