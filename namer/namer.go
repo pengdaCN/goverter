@@ -2,6 +2,7 @@ package namer
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/jmattheis/goverter/xtype"
 )
@@ -70,7 +71,7 @@ func (m *Namer) Name(name string) string {
 	for i := 1; ; i++ {
 		numberedName := name
 		if i > 1 {
-			numberedName += fmt.Sprint(i)
+			numberedName += strconv.Itoa(i)
 		}
 		if m.Register(numberedName) {
 			return numberedName

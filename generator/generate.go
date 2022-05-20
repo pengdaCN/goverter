@@ -21,10 +21,10 @@ type Config struct {
 // BuildSteps that'll used for generation.
 var BuildSteps = []builder.Builder{
 	&builder.BasicTargetPointerRule{},
+	&builder.Struct{},
 	&builder.Pointer{},
 	&builder.TargetPointer{},
 	&builder.Basic{},
-	&builder.Struct{},
 	&builder.List{},
 	&builder.Map{},
 }
@@ -47,8 +47,8 @@ func Generate(pattern string, mapping []comments.Converter, config Config) (*jen
 			namer:      namer.New(),
 			file:       file,
 			name:       converter.Config.Name,
-			lookup:     map[xtype.Signature]*methodDefinition{},
-			extend:     map[xtype.Signature]*methodDefinition{},
+			lookup:     map[xtype.Signature]*builder.MethodDefinition{},
+			extend:     map[xtype.Signature]*builder.MethodDefinition{},
 			workingDir: config.WorkingDir,
 		}
 		interf := obj.Type().Underlying().(*types.Interface)
@@ -67,16 +67,16 @@ func Generate(pattern string, mapping []comments.Converter, config Config) (*jen
 		// we checked in comments, that it is an interface
 		for i := 0; i < interf.NumMethods(); i++ {
 			method := interf.Method(i)
-			converterMethod := comments.Method{}
-
-			if m, ok := converter.Methods[method.Name()]; ok {
-				converterMethod = m
-			}
-			if err := gen.registerMethod(method, converterMethod); err != nil {
+			//var converterMethod comments.Method
+			//
+			//if m, ok := converter.Methods[method.Name()]; ok {
+			//	converterMethod = m
+			//}
+			if err := gen.registerMethod(method); err != nil {
 				return nil, fmt.Errorf("Error while creating converter method:\n    %s\n\n%s", method.String(), err)
 			}
 		}
-		if err := gen.createMethods(); err != nil {
+		if err := gen.createMethods(&converter); err != nil {
 			return nil, err
 		}
 	}

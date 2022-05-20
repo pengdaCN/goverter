@@ -9,7 +9,7 @@ import (
 // Builder builds converter implementations, and can decide if it can handle the given type.
 type Builder interface {
 	// Matches returns true, if the builder can create handle the given types
-	Matches(source, target *xtype.Type) bool
+	Matches(ctx *MethodContext, source, target *xtype.Type) bool
 	// Build creates conversion source code for the given source and target type.
 	Build(gen Generator, ctx *MethodContext, sourceID *xtype.JenID, source, target *xtype.Type) ([]jen.Code, *xtype.JenID, *Error)
 }
@@ -18,6 +18,7 @@ type Builder interface {
 // If no one Builder#Matches then, an error is returned.
 type Generator interface {
 	Build(ctx *MethodContext, sourceID *xtype.JenID, source, target *xtype.Type) ([]jen.Code, *xtype.JenID, *Error)
+	Lookup(source, target *xtype.Type) (*MethodDefinition, bool)
 }
 
 // MethodContext exposes information for the current method.
@@ -31,4 +32,19 @@ type MethodContext struct {
 	PointerChange   bool
 	MatchIgnoreCase bool
 	NoStrict        bool
+	ZeroCopyStruct  bool
+	TargetID        *xtype.JenID
+}
+
+func (m *MethodContext) Enter() *MethodContext {
+	return &MethodContext{
+		Namer:           namer.New(),
+		Mapping:         m.Mapping,
+		IgnoredFields:   m.IgnoredFields,
+		IdentityMapping: m.IdentityMapping,
+		MatchIgnoreCase: m.MatchIgnoreCase,
+		PointerChange:   m.PointerChange,
+		NoStrict:        m.NoStrict,
+		ZeroCopyStruct:  m.ZeroCopyStruct,
+	}
 }

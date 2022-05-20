@@ -14,15 +14,23 @@ import (
 type Struct struct{}
 
 // Matches returns true, if the builder can create handle the given types.
-func (*Struct) Matches(source, target *xtype.Type) bool {
-	return source.Struct && target.Struct
+func (p *Struct) Matches(ctx *MethodContext, source, target *xtype.Type) bool {
+	return (ctx.ZeroCopyStruct && source.Pointer && target.Pointer && source.PointerInner.Struct && target.PointerInner.Struct) || (source.Struct && target.Struct)
 }
 
 // Build creates conversion source code for the given source and target type.
 func (*Struct) Build(gen Generator, ctx *MethodContext, sourceID *xtype.JenID, source, target *xtype.Type) ([]jen.Code, *xtype.JenID, *Error) {
-	name := ctx.Name(target.ID())
-	stmt := []jen.Code{
-		jen.Var().Id(name).Add(target.TypeAsJen()),
+	var (
+		name string
+		stmt []jen.Code
+	)
+
+	switch {
+	case ctx.ZeroCopyStruct:
+		name = xtype.Out
+	default:
+		name = ctx.Name(target.ID())
+		stmt = append(stmt, jen.Var().Id(name).Add(target.TypeAsJen()))
 	}
 
 	for i := 0; i < target.StructType.NumFields(); i++ {
@@ -84,6 +92,7 @@ func (*Struct) Build(gen Generator, ctx *MethodContext, sourceID *xtype.JenID, s
 	return stmt, xtype.VariableID(jen.Id(name)), nil
 }
 
+// TODO 对错误进行处理
 func mapField(_ Generator, ctx *MethodContext, targetField *types.Var, sourceID *xtype.JenID, source, target *xtype.Type) (*jen.Statement, *xtype.Type, []jen.Code, []*Path, *Error) {
 	var lift []*Path
 

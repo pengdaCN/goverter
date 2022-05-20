@@ -2,6 +2,7 @@ package generator
 
 import (
 	"fmt"
+	"github.com/jmattheis/goverter/builder"
 	"go/types"
 	"regexp"
 	"strings"
@@ -238,7 +239,7 @@ func (g *generator) parseExtendFunc(fn *types.Func, opts *ParseExtendOptions) er
 	}
 
 	xsig := xtype.Signature{Source: source.String(), Target: target.String()}
-	methodDef := &methodDefinition{
+	methodDef := &builder.MethodDefinition{
 		ID:               fn.String(),
 		Explicit:         true,
 		Call:             jen.Qual(fn.Pkg().Path(), fn.Name()),

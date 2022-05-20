@@ -51,7 +51,7 @@ func GenerateConverterFile(fileName string, c GenerateConfig) error {
 		return err
 	}
 
-	err = os.MkdirAll(path.Dir(fileName), os.ModePerm)
+	err = os.MkdirAll(path.Dir(fileName), 0755)
 	if err != nil {
 		return err
 	}

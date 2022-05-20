@@ -3,6 +3,7 @@ package comments
 import (
 	"bufio"
 	"fmt"
+	"github.com/jmattheis/goverter/builder"
 	"go/ast"
 	"go/types"
 	"sort"
@@ -50,6 +51,24 @@ type Method struct {
 	// target to source
 	IdentityMapping map[string]struct{}
 	NoStrict        bool
+	ZeroCopy        bool
+}
+
+func (c *Converter) BuildCtx(method string) *builder.MethodContext {
+	m, ok := c.Methods[method]
+	if ok {
+		return &builder.MethodContext{
+			Mapping:         m.NameMapping,
+			MatchIgnoreCase: m.MatchIgnoreCase,
+			IgnoredFields:   m.IgnoredFields,
+			IdentityMapping: m.IdentityMapping,
+			NoStrict:        m.NoStrict,
+			ZeroCopyStruct:  m.ZeroCopy,
+		}
+
+	} else {
+		return &builder.MethodContext{}
+	}
 }
 
 // ParseDocs parses the docs for the given pattern.
@@ -236,6 +255,9 @@ func parseMethodComment(comment string) (Method, error) {
 				continue
 			case "noStrict":
 				m.NoStrict = true
+				continue
+			case "zeroCopy":
+				m.ZeroCopy = true
 				continue
 			}
 			return m, fmt.Errorf("unknown %s comment: %s", prefix, line)
