@@ -256,7 +256,7 @@ func (g *generator) Build(ctx *builder.MethodContext, sourceID *xtype.JenID, sou
 			name         string
 			needZeroCopy bool
 		)
-		if needZeroCopy {
+		if !needZeroCopy {
 			name = g.namer.Name(source.UnescapedID() + "To" + strings.Title(target.UnescapedID()))
 		} else {
 			name = g.namer.Name(source.UnescapedID() + "Mapping" + strings.Title(target.UnescapedID()))
