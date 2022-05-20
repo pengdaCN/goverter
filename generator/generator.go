@@ -2,16 +2,16 @@ package generator
 
 import (
 	"fmt"
-	"go/types"
-	"sort"
-	"strings"
-
 	"github.com/dave/jennifer/jen"
 	"github.com/jmattheis/goverter/builder"
 	"github.com/jmattheis/goverter/comments"
 	"github.com/jmattheis/goverter/namer"
 	"github.com/jmattheis/goverter/xtype"
+	"go/types"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 	"golang.org/x/tools/go/packages"
+	"sort"
 )
 
 type generator struct {
@@ -119,19 +119,17 @@ func (g *generator) appendToFile() {
 }
 
 func (g *generator) buildMethod(ctx *builder.MethodContext, method *builder.MethodDefinition) *builder.Error {
-	sourceID := jen.Id("source")
+	sourceID := jen.Id(xtype.In)
 	source := method.Source
 
 	target := method.Target
 
 	var (
-		returns []jen.Code
+		returns = make([]jen.Code, 2)
 	)
 
-	returns = []jen.Code{target.TypeAsJen()}
-
 	if method.ReturnError {
-		returns = append(returns, jen.Id("error"))
+		returns[1] = jen.Id("error")
 	}
 
 	ctx.TargetType = target
@@ -150,13 +148,15 @@ func (g *generator) buildMethod(ctx *builder.MethodContext, method *builder.Meth
 	stmt = append(stmt, jen.Return(ret...))
 
 	var (
-		params = []jen.Code{jen.Id("source").Add(source.TypeAsJen())}
+		params []jen.Code
 	)
-
 	switch {
 	case method.ZeroCopyStruct:
-		params = append(params, jen.Id("target").Add(target.TypeAsJen()))
+		params = append(params, jen.Id(xtype.In).Add(jen.Op("*").Add(source.TypeAsJen())), jen.Id(xtype.Out).Add(jen.Op("*").Add(target.TypeAsJen())))
+		returns[0] = jen.Op("*").Add(target.TypeAsJen())
 	default:
+		params = append(params, jen.Id(xtype.In).Add(source.TypeAsJen()))
+		returns[0] = target.TypeAsJen()
 	}
 
 	method.Jen = jen.Func().
@@ -184,10 +184,7 @@ func (g *generator) buildNoLookup(ctx *builder.MethodContext, sourceID *xtype.Je
 
 // Build builds an implementation for the given source and target type, or uses an existing method for it.
 func (g *generator) Build(ctx *builder.MethodContext, sourceID *xtype.JenID, source, target *xtype.Type) ([]jen.Code, *xtype.JenID, *builder.Error) {
-	method, ok := g.extend[xtype.Signature{Source: source.T.String(), Target: target.T.String()}]
-	if !ok {
-		method, ok = g.lookup[xtype.Signature{Source: source.T.String(), Target: target.T.String()}]
-	}
+	method, ok := g.Lookup(source, target)
 
 	if ok {
 		var (
@@ -253,18 +250,10 @@ func (g *generator) Build(ctx *builder.MethodContext, sourceID *xtype.JenID, sou
 
 	if (source.Named && !source.Basic) || (target.Named && !target.Basic) {
 		var (
-			name         string
-			needZeroCopy bool
+			name string
 		)
-		if !needZeroCopy {
-			name = g.namer.Name(source.UnescapedID() + "To" + strings.Title(target.UnescapedID()))
-		} else {
-			name = g.namer.Name(source.UnescapedID() + "Mapping" + strings.Title(target.UnescapedID()))
-		}
 
 		method := &builder.MethodDefinition{
-			ID:     name,
-			Name:   name,
 			Source: xtype.TypeOf(source.T),
 			Target: xtype.TypeOf(target.T),
 		}
@@ -272,6 +261,14 @@ func (g *generator) Build(ctx *builder.MethodContext, sourceID *xtype.JenID, sou
 		if source.Struct && target.Struct && ctx.PointerChange && ctx.ZeroCopyStruct {
 			method.ZeroCopyStruct = true
 		}
+		if !method.ZeroCopyStruct {
+			name = g.namer.Name(source.UnescapedID() + "To" + cases.Title(language.English).String(target.UnescapedID()))
+		} else {
+			name = g.namer.Name(source.UnescapedID() + "Mapping" + cases.Title(language.English).String(target.UnescapedID()))
+		}
+		method.ID = name
+		method.Name = name
+		method.Call = jen.Id(xtype.ThisVar).Dot(name)
 
 		if ctx.PointerChange {
 			ctx.PointerChange = false
