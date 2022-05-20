@@ -14,8 +14,8 @@ import (
 type Struct struct{}
 
 // Matches returns true, if the builder can create handle the given types.
-func (p *Struct) Matches(ctx *MethodContext, source, target *xtype.Type) bool {
-	return (ctx.ZeroCopyStruct && source.Pointer && target.Pointer && source.PointerInner.Struct && target.PointerInner.Struct) || (source.Struct && target.Struct)
+func (p *Struct) Matches(_ *MethodContext, source, target *xtype.Type) bool {
+	return source.Struct && target.Struct
 }
 
 // Build creates conversion source code for the given source and target type.
@@ -25,8 +25,18 @@ func (*Struct) Build(gen Generator, ctx *MethodContext, sourceID *xtype.JenID, s
 		stmt []jen.Code
 	)
 
+	mdef, ok := gen.Lookup(source, target)
+	if !ok {
+		NewError("not found MethodDefinition").Lift(&Path{
+			Prefix:     ".",
+			SourceID:   "???",
+			TargetID:   source.T.String(),
+			TargetType: target.T.String(),
+		})
+	}
+
 	switch {
-	case ctx.ZeroCopyStruct:
+	case mdef.ZeroCopyStruct:
 		name = xtype.Out
 	default:
 		name = ctx.Name(target.ID())

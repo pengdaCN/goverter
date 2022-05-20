@@ -43,7 +43,7 @@ func (*Pointer) Build(gen Generator, ctx *MethodContext, sourceID *xtype.JenID, 
 
 	mdef, ok := gen.Lookup(source.PointerInner, target.PointerInner)
 	if !ok {
-		return nil, nil, NewError("not found method").Lift(&Path{
+		return nil, nil, NewError("not found MethodDefinition").Lift(&Path{
 			SourceID:   "*",
 			SourceType: source.PointerInner.T.String(),
 			TargetID:   "*",
@@ -80,6 +80,7 @@ func (*Pointer) Build(gen Generator, ctx *MethodContext, sourceID *xtype.JenID, 
 		jen.Var().Id(outerVar).Add(target.TypeAsJen()),
 		jen.If(sourceID.Code.Clone().Op("!=").Nil()).Block(ifBlock...),
 	}
+
 	return stmt, xtype.VariableID(jen.Id(outerVar)), err
 }
 
