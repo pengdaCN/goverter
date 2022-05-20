@@ -14,41 +14,19 @@ import (
 	"golang.org/x/tools/go/packages"
 )
 
-type methodDefinition struct {
-	ID              string
-	Explicit        bool
-	Name            string
-	Call            *jen.Statement
-	Source          *xtype.Type
-	Target          *xtype.Type
-	Mapping         map[string]string
-	IgnoredFields   map[string]struct{}
-	IdentityMapping map[string]struct{}
-	MatchIgnoreCase bool
-	NoStrict        bool
-	ZeroCopyStruct  bool
-
-	Jen jen.Code
-
-	SelfAsFirstParam bool
-	ReturnError      bool
-	ReturnTypeOrigin string
-	Dirty            bool
-}
-
 type generator struct {
 	namer  *namer.Namer
 	name   string
 	file   *jen.File
-	lookup map[xtype.Signature]*methodDefinition
-	extend map[xtype.Signature]*methodDefinition
+	lookup map[xtype.Signature]*builder.MethodDefinition
+	extend map[xtype.Signature]*builder.MethodDefinition
 	// pkgCache caches the extend packages, saving load time
 	pkgCache map[string][]*packages.Package
 	// workingDir is a working directory, can be empty
 	workingDir string
 }
 
-func (g *generator) registerMethod(methodType *types.Func, methodComments comments.Method) error {
+func (g *generator) registerMethod(methodType *types.Func) error {
 	signature, ok := methodType.Type().(*types.Signature)
 	if !ok {
 		return fmt.Errorf("expected signature %#v", methodType.Type())
@@ -72,18 +50,13 @@ func (g *generator) registerMethod(methodType *types.Func, methodComments commen
 		}
 	}
 
-	m := &methodDefinition{
+	m := &builder.MethodDefinition{
 		Call:             jen.Id(xtype.ThisVar).Dot(methodType.Name()),
 		ID:               methodType.String(),
 		Explicit:         true,
 		Name:             methodType.Name(),
 		Source:           xtype.TypeOf(source),
 		Target:           xtype.TypeOf(target),
-		Mapping:          methodComments.NameMapping,
-		MatchIgnoreCase:  methodComments.MatchIgnoreCase,
-		IgnoredFields:    methodComments.IgnoredFields,
-		IdentityMapping:  methodComments.IdentityMapping,
-		NoStrict:         methodComments.NoStrict,
 		ReturnError:      returnError,
 		ReturnTypeOrigin: methodType.FullName(),
 	}
@@ -96,8 +69,8 @@ func (g *generator) registerMethod(methodType *types.Func, methodComments commen
 	return nil
 }
 
-func (g *generator) createMethods() error {
-	var methods []*methodDefinition
+func (g *generator) createMethods(doc *comments.Converter) error {
+	var methods []*builder.MethodDefinition
 	for _, method := range g.lookup {
 		methods = append(methods, method)
 	}
@@ -109,7 +82,10 @@ func (g *generator) createMethods() error {
 			continue
 		}
 		method.Dirty = false
-		err := g.buildMethod(method)
+
+		ctx := doc.BuildCtx(method.Name)
+
+		err := g.buildMethod(ctx.Enter(), method)
 		if err != nil {
 			err = err.Lift(&builder.Path{
 				SourceID:   "source",
@@ -122,7 +98,7 @@ func (g *generator) createMethods() error {
 	}
 	for _, method := range g.lookup {
 		if method.Dirty {
-			return g.createMethods()
+			return g.createMethods(doc)
 		}
 	}
 	g.appendToFile()
@@ -130,7 +106,7 @@ func (g *generator) createMethods() error {
 }
 
 func (g *generator) appendToFile() {
-	var methods []*methodDefinition
+	var methods []*builder.MethodDefinition
 	for _, method := range g.lookup {
 		methods = append(methods, method)
 	}
@@ -142,28 +118,25 @@ func (g *generator) appendToFile() {
 	}
 }
 
-func (g *generator) buildMethod(method *methodDefinition) *builder.Error {
+func (g *generator) buildMethod(ctx *builder.MethodContext, method *builder.MethodDefinition) *builder.Error {
 	sourceID := jen.Id("source")
 	source := method.Source
 
-	// TODO zeroCopyStruct
 	target := method.Target
 
-	returns := []jen.Code{target.TypeAsJen()}
+	var (
+		returns []jen.Code
+	)
+
+	returns = []jen.Code{target.TypeAsJen()}
+
 	if method.ReturnError {
 		returns = append(returns, jen.Id("error"))
 	}
 
-	ctx := &builder.MethodContext{
-		Namer:           namer.New(),
-		Mapping:         method.Mapping,
-		IgnoredFields:   method.IgnoredFields,
-		IdentityMapping: method.IdentityMapping,
-		MatchIgnoreCase: method.MatchIgnoreCase,
-		TargetType:      method.Target,
-		NoStrict:        method.NoStrict,
-		Signature:       xtype.Signature{Source: method.Source.T.String(), Target: method.Target.T.String()},
-	}
+	ctx.TargetType = target
+	ctx.Signature = xtype.Signature{Source: method.Source.T.String(), Target: method.Target.T.String()}
+
 	stmt, newID, err := g.buildNoLookup(ctx, xtype.VariableID(sourceID.Clone()), source, target)
 	if err != nil {
 		return err
@@ -176,8 +149,25 @@ func (g *generator) buildMethod(method *methodDefinition) *builder.Error {
 
 	stmt = append(stmt, jen.Return(ret...))
 
-	method.Jen = jen.Func().Params(jen.Id(xtype.ThisVar).Op("*").Id(g.name)).Id(method.Name).
-		Params(jen.Id("source").Add(source.TypeAsJen())).Params(returns...).
+	var (
+		params = []jen.Code{jen.Id("source").Add(source.TypeAsJen())}
+	)
+
+	switch {
+	case method.ZeroCopyStruct:
+		params = append(params, jen.Id("target").Add(target.TypeAsJen()))
+	default:
+	}
+
+	method.Jen = jen.Func().
+		Params(
+			jen.Id(xtype.ThisVar).
+				Op("*").
+				Id(g.name),
+		).
+		Id(method.Name).
+		Params(params...).
+		Params(returns...).
 		Block(stmt...)
 
 	return nil
@@ -200,11 +190,20 @@ func (g *generator) Build(ctx *builder.MethodContext, sourceID *xtype.JenID, sou
 	}
 
 	if ok {
-		var params []jen.Code
+		var (
+			params []jen.Code
+		)
 		if method.SelfAsFirstParam {
 			params = append(params, jen.Id(xtype.ThisVar))
 		}
 		params = append(params, sourceID.Code.Clone())
+
+		switch {
+		case method.ZeroCopyStruct:
+			params = append(params, ctx.TargetID.Code.Clone())
+		default:
+		}
+
 		if method.ReturnError {
 			current := g.lookup[ctx.Signature]
 			if !current.ReturnError {
@@ -216,47 +215,71 @@ func (g *generator) Build(ctx *builder.MethodContext, sourceID *xtype.JenID, sou
 				current.Dirty = true
 			}
 
-			name := ctx.Name(target.ID())
-			innerName := ctx.Name("errValue")
-			stmt := []jen.Code{
-				jen.List(jen.Id(name), jen.Id("err")).Op(":=").Add(method.Call.Clone().Call(params...)),
-				jen.If(jen.Id("err").Op("!=").Nil()).Block(
-					jen.Var().Id(innerName).Add(ctx.TargetType.TypeAsJen()),
-					jen.Return(jen.Id(innerName), jen.Id("err")),
-				),
+			switch {
+			case method.ZeroCopyStruct:
+				stmt := []jen.Code{
+					jen.List(jen.Id("err")).Op(":=").Add(
+						method.Call.Clone().Call(params...),
+					),
+					jen.If(jen.Id("err").Op("!=").Nil()).Block(
+						jen.Return(jen.Id("err")),
+					),
+				}
+
+				return stmt, nil, nil
+			default:
+				name := ctx.Name(target.ID())
+				innerName := ctx.Name("errValue")
+				stmt := []jen.Code{
+					jen.List(jen.Id(name), jen.Id("err")).Op(":=").Add(method.Call.Clone().Call(params...)),
+					jen.If(jen.Id("err").Op("!=").Nil()).Block(
+						jen.Var().Id(innerName).Add(ctx.TargetType.TypeAsJen()),
+						jen.Return(jen.Id(innerName), jen.Id("err")),
+					),
+				}
+				return stmt, xtype.VariableID(jen.Id(name)), nil
 			}
-			return stmt, xtype.VariableID(jen.Id(name)), nil
 		}
-		id := xtype.OtherID(method.Call.Clone().Call(params...))
-		return nil, id, nil
+
+		stmt := method.Call.Clone().Call(params...)
+
+		switch {
+		case method.ZeroCopyStruct:
+			return []jen.Code{stmt}, nil, nil
+		default:
+			return nil, xtype.OtherID(stmt), nil
+		}
 	}
 
 	if (source.Named && !source.Basic) || (target.Named && !target.Basic) {
-		name := g.namer.Name(source.UnescapedID() + "To" + strings.Title(target.UnescapedID()))
-
-		method := &methodDefinition{
-			ID:            name,
-			Name:          name,
-			Source:        xtype.TypeOf(source.T),
-			Target:        xtype.TypeOf(target.T),
-			Mapping:       map[string]string{},
-			IgnoredFields: map[string]struct{}{},
-			Call:          jen.Id(xtype.ThisVar).Dot(name),
-			NoStrict:      ctx.NoStrict,
-			// TODO 考虑是否需要设置
-			ZeroCopyStruct: ctx.ZeroCopyStruct,
+		var (
+			name         string
+			needZeroCopy bool
+		)
+		if needZeroCopy {
+			name = g.namer.Name(source.UnescapedID() + "To" + strings.Title(target.UnescapedID()))
+		} else {
+			name = g.namer.Name(source.UnescapedID() + "Mapping" + strings.Title(target.UnescapedID()))
 		}
+
+		method := &builder.MethodDefinition{
+			ID:     name,
+			Name:   name,
+			Source: xtype.TypeOf(source.T),
+			Target: xtype.TypeOf(target.T),
+		}
+
+		if source.Struct && target.Struct && ctx.PointerChange && ctx.ZeroCopyStruct {
+			method.ZeroCopyStruct = true
+		}
+
 		if ctx.PointerChange {
 			ctx.PointerChange = false
-			method.Mapping = ctx.Mapping
-			method.MatchIgnoreCase = ctx.MatchIgnoreCase
-			method.IgnoredFields = ctx.IgnoredFields
 		}
 
-		// TODO zeroCopyStruct 特殊处理
 		g.lookup[xtype.Signature{Source: source.T.String(), Target: target.T.String()}] = method
 		g.namer.Register(method.Name)
-		if err := g.buildMethod(method); err != nil {
+		if err := g.buildMethod(ctx.Enter(), method); err != nil {
 			return nil, nil, err
 		}
 		// try again to trigger the found method thingy above
@@ -270,4 +293,13 @@ func (g *generator) Build(ctx *builder.MethodContext, sourceID *xtype.JenID, sou
 	}
 
 	return nil, nil, builder.NewError(fmt.Sprintf("TypeMismatch: Cannot convert %s to %s", source.T, target.T))
+}
+
+func (g *generator) Lookup(source, target *xtype.Type) (*builder.MethodDefinition, bool) {
+	method, ok := g.extend[xtype.Signature{Source: source.T.String(), Target: target.T.String()}]
+	if !ok {
+		method, ok = g.lookup[xtype.Signature{Source: source.T.String(), Target: target.T.String()}]
+	}
+
+	return method, ok
 }

@@ -17,9 +17,21 @@ func (*Pointer) Matches(_ *MethodContext, source, target *xtype.Type) bool {
 func (*Pointer) Build(gen Generator, ctx *MethodContext, sourceID *xtype.JenID, source, target *xtype.Type) ([]jen.Code, *xtype.JenID, *Error) {
 	ctx.PointerChange = true
 
-	outerVar := ctx.Name(target.ID())
+	var (
+		outerVar     = ctx.Name(target.ID())
+		innerVar     = ctx.Name(target.PointerInner.ID())
+		nextSourceId *xtype.JenID
+	)
 
-	nextBlock, id, err := gen.Build(ctx, xtype.OtherID(jen.Op("*").Add(sourceID.Code.Clone())), source.PointerInner, target.PointerInner)
+	switch {
+	case ctx.ZeroCopyStruct:
+		ctx.TargetID = xtype.OtherID(jen.Op("&").Add(jen.Id(innerVar)))
+		nextSourceId = xtype.OtherID(sourceID.Code.Clone())
+	default:
+		nextSourceId = xtype.OtherID(jen.Op("*").Add(sourceID.Code.Clone()))
+	}
+
+	nextBlock, id, err := gen.Build(ctx, nextSourceId, source.PointerInner, target.PointerInner)
 	if err != nil {
 		return nil, nil, err.Lift(&Path{
 			SourceID:   "*",
@@ -29,14 +41,39 @@ func (*Pointer) Build(gen Generator, ctx *MethodContext, sourceID *xtype.JenID, 
 		})
 	}
 
-	// TODO 优化指针问题
-	ifBlock := nextBlock
-	if id.Variable {
-		ifBlock = append(ifBlock, jen.Id(outerVar).Op("=").Op("&").Add(id.Code.Clone()))
-	} else {
-		tempName := ctx.Name(target.PointerInner.ID())
-		ifBlock = append(ifBlock, jen.Id(tempName).Op(":=").Add(id.Code.Clone()))
-		ifBlock = append(ifBlock, jen.Id(outerVar).Op("=").Op("&").Id(tempName))
+	mdef, ok := gen.Lookup(source.PointerInner, target.PointerInner)
+	if !ok {
+		return nil, nil, NewError("not found method").Lift(&Path{
+			SourceID:   "*",
+			SourceType: source.PointerInner.T.String(),
+			TargetID:   "*",
+			TargetType: target.PointerInner.T.String(),
+		})
+	}
+
+	var (
+		ifBlock []jen.Code
+	)
+
+	switch {
+	case mdef.ZeroCopyStruct:
+		ifBlock = append(ifBlock, jen.Var().Id(innerVar).Add(target.PointerInner.TypeAsJen()))
+	default:
+	}
+
+	ifBlock = append(ifBlock, nextBlock...)
+
+	switch {
+	case mdef.ZeroCopyStruct:
+		ifBlock = append(ifBlock, jen.Id(outerVar).Op("=").Op("&").Add(jen.Id(innerVar)))
+	default:
+		if id.Variable {
+			ifBlock = append(ifBlock, jen.Id(outerVar).Op("=").Op("&").Add(id.Code.Clone()))
+		} else {
+			tempName := ctx.Name(target.PointerInner.ID())
+			ifBlock = append(ifBlock, jen.Id(tempName).Op(":=").Add(id.Code.Clone()))
+			ifBlock = append(ifBlock, jen.Id(outerVar).Op("=").Op("&").Id(tempName))
+		}
 	}
 
 	stmt := []jen.Code{

@@ -20,10 +20,17 @@ func (p *Struct) Matches(ctx *MethodContext, source, target *xtype.Type) bool {
 
 // Build creates conversion source code for the given source and target type.
 func (*Struct) Build(gen Generator, ctx *MethodContext, sourceID *xtype.JenID, source, target *xtype.Type) ([]jen.Code, *xtype.JenID, *Error) {
-	// TODO zeroCopyStruct
-	name := ctx.Name(target.ID())
-	stmt := []jen.Code{
-		jen.Var().Id(name).Add(target.TypeAsJen()),
+	var (
+		name string
+		stmt []jen.Code
+	)
+
+	switch {
+	case ctx.ZeroCopyStruct:
+		name = xtype.Out
+	default:
+		name = ctx.Name(target.ID())
+		stmt = append(stmt, jen.Var().Id(name).Add(target.TypeAsJen()))
 	}
 
 	for i := 0; i < target.StructType.NumFields(); i++ {

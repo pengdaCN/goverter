@@ -18,6 +18,7 @@ type Builder interface {
 // If no one Builder#Matches then, an error is returned.
 type Generator interface {
 	Build(ctx *MethodContext, sourceID *xtype.JenID, source, target *xtype.Type) ([]jen.Code, *xtype.JenID, *Error)
+	Lookup(source, target *xtype.Type) (*MethodDefinition, bool)
 }
 
 // MethodContext exposes information for the current method.
@@ -33,4 +34,17 @@ type MethodContext struct {
 	NoStrict        bool
 	ZeroCopyStruct  bool
 	TargetID        *xtype.JenID
+}
+
+func (m *MethodContext) Enter() *MethodContext {
+	return &MethodContext{
+		Namer:           namer.New(),
+		Mapping:         m.Mapping,
+		IgnoredFields:   m.IgnoredFields,
+		IdentityMapping: m.IdentityMapping,
+		MatchIgnoreCase: m.MatchIgnoreCase,
+		PointerChange:   m.PointerChange,
+		NoStrict:        m.NoStrict,
+		ZeroCopyStruct:  m.ZeroCopyStruct,
+	}
 }
