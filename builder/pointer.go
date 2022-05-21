@@ -96,7 +96,19 @@ func (*TargetPointer) Matches(_ *MethodContext, source, target *xtype.Type) bool
 func (*TargetPointer) Build(gen Generator, ctx *MethodContext, sourceID *xtype.JenID, source, target *xtype.Type) ([]jen.Code, *xtype.JenID, *Error) {
 	ctx.PointerChange = true
 
-	stmt, id, err := gen.Build(ctx, sourceID, source, target.PointerInner)
+	var (
+		nextSourceId *xtype.JenID
+		innerVar     = ctx.Name(target.PointerInner.ID())
+	)
+	switch {
+	case ctx.ZeroCopyStruct:
+		nextSourceId = xtype.OtherID(jen.Op("&").Add(sourceID.Code))
+		ctx.TargetID = xtype.OtherID(jen.Op("&").Add(jen.Id(innerVar)))
+	default:
+		nextSourceId = sourceID
+	}
+
+	stmt, id, err := gen.Build(ctx, nextSourceId, source, target.PointerInner)
 	if err != nil {
 		return nil, nil, err.Lift(&Path{
 			SourceID:   "*",
@@ -105,10 +117,30 @@ func (*TargetPointer) Build(gen Generator, ctx *MethodContext, sourceID *xtype.J
 			TargetType: target.PointerInner.T.String(),
 		})
 	}
-	if id.Variable {
-		return stmt, xtype.OtherID(jen.Op("&").Add(id.Code)), nil
+
+	mdef, ok := gen.Lookup(source, target.PointerInner)
+	if !ok {
+		return nil, nil, NewError("not found MethodDefinition").Lift(&Path{
+			SourceID:   "*",
+			SourceType: source.PointerInner.T.String(),
+			TargetID:   "*",
+			TargetType: target.PointerInner.T.String(),
+		})
 	}
-	tempName := ctx.Name(target.PointerInner.ID())
-	stmt = append(stmt, jen.Id(tempName).Op(":=").Add(id.Code))
-	return stmt, xtype.OtherID(jen.Op("&").Id(tempName)), nil
+
+	switch {
+	case mdef.ZeroCopyStruct:
+		_stmt := make([]jen.Code, len(stmt)+1)
+		_stmt[0] = jen.Var().Id(innerVar).Add(target.PointerInner.TypeAsJen())
+		copy(_stmt[1:], stmt)
+
+		stmt = _stmt
+	default:
+		if id.Variable {
+			return stmt, xtype.OtherID(jen.Op("&").Add(id.Code)), nil
+		}
+		stmt = append(stmt, jen.Id(innerVar).Op(":=").Add(id.Code))
+	}
+
+	return stmt, xtype.OtherID(jen.Op("&").Id(innerVar)), nil
 }
