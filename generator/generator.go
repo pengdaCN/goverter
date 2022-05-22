@@ -59,6 +59,7 @@ func (g *generator) registerMethod(methodType *types.Func) error {
 		Target:           xtype.TypeOf(target),
 		ReturnError:      returnError,
 		ReturnTypeOrigin: methodType.FullName(),
+		Export:           true,
 	}
 
 	g.lookup[xtype.Signature{
