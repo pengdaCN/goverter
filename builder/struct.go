@@ -38,6 +38,14 @@ func (*Struct) Build(gen Generator, ctx *MethodContext, sourceID *xtype.JenID, s
 	switch {
 	case mdef.ZeroCopyStruct:
 		name = xtype.Out
+		stmt = append(stmt, jen.If(
+			jen.Id(xtype.In).Op("==").Nil().
+				Op("||").
+				Id(xtype.Out).Op("==").Nil(),
+		).
+			Block(
+				jen.Return(jen.Nil()),
+			))
 	default:
 		name = ctx.Name(target.ID())
 		stmt = append(stmt, jen.Var().Id(name).Add(target.TypeAsJen()))
