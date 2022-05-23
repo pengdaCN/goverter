@@ -26,17 +26,8 @@ func (*Struct) Build(gen Generator, ctx *MethodContext, sourceID *xtype.JenID, s
 	)
 
 	mdef, ok := gen.Lookup(ctx, source, target)
-	if !ok {
-		NewError("not found MethodDefinition").Lift(&Path{
-			Prefix:     ".",
-			SourceID:   "???",
-			TargetID:   source.T.String(),
-			TargetType: target.T.String(),
-		})
-	}
-
 	switch {
-	case mdef.ZeroCopyStruct:
+	case ok && mdef.ZeroCopyStruct:
 		name = xtype.Out
 		stmt = append(stmt, jen.If(
 			jen.Id(xtype.In).Op("==").Nil().
@@ -109,7 +100,6 @@ func (*Struct) Build(gen Generator, ctx *MethodContext, sourceID *xtype.JenID, s
 			return nil, nil, err.Lift(lift...)
 		}
 
-		// TODO 优化此部分逻辑
 		mdef, ok := gen.Lookup(ctx, nextSource, targetFieldType)
 		switch {
 		case ok && mdef.ZeroCopyStruct:

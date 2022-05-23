@@ -184,8 +184,20 @@ func (g *generator) buildNoLookup(ctx *builder.MethodContext, sourceID *xtype.Je
 
 // Build builds an implementation for the given source and target type, or uses an existing method for it.
 func (g *generator) Build(ctx *builder.MethodContext, sourceID *xtype.JenID, source, target *xtype.Type) ([]jen.Code, *xtype.JenID, *builder.Error) {
-	_source, _target, _sourceID, _targetID := OptimizeParams(ctx, source, target, sourceID, ctx.TargetID)
-	method, ok := g._lookup(_source, _target)
+	var (
+		_source   = source
+		_target   = target
+		_sourceID = sourceID
+		_targetID *xtype.JenID
+		method    *builder.MethodDefinition
+		ok        bool
+	)
+
+	_sourceID, method, ok = g._lookupExtend(source, target, sourceID)
+	if !ok {
+		_source, _target, _sourceID, _targetID = OptimizeParams(ctx, source, target, sourceID, ctx.TargetID)
+		method, ok = g._lookup(_source, _target)
+	}
 
 	if ok {
 		var (
@@ -300,13 +312,30 @@ func (g *generator) Lookup(ctx *builder.MethodContext, source, target *xtype.Typ
 }
 
 func (g *generator) _lookup(source, target *xtype.Type) (*builder.MethodDefinition, bool) {
-	// TODO 对扩展函数特殊处理
-	method, ok := g.extend[xtype.Signature{Source: source.T.String(), Target: target.T.String()}]
-	if !ok {
-		method, ok = g.lookup[xtype.Signature{Source: source.T.String(), Target: target.T.String()}]
-	}
+	method, ok := g.lookup[xtype.Signature{Source: source.T.String(), Target: target.T.String()}]
 
 	return method, ok
+}
+
+func (g *generator) _lookupExtend(source, target *xtype.Type, sourceID *xtype.JenID) (
+	nextSourceID *xtype.JenID,
+	method *builder.MethodDefinition,
+	ok bool,
+) {
+	method, ok = g.extend[xtype.Signature{Source: source.T.String(), Target: target.T.String()}]
+	if !ok {
+		source, nextSourceID = optimizeParam(source, sourceID)
+		method, ok = g.extend[xtype.Signature{
+			Source: source.T.String(),
+			Target: target.T.String(),
+		}]
+
+		return
+	}
+
+	nextSourceID = sourceID
+
+	return
 }
 
 func OptimizeParams(ctx *builder.MethodContext, source, target *xtype.Type, sourceID, targetID *xtype.JenID) (
