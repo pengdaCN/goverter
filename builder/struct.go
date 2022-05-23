@@ -62,9 +62,22 @@ func (*Struct) Build(gen Generator, ctx *MethodContext, sourceID *xtype.JenID, s
 			})
 		}
 
+		// TODO 重构IdentityMapping与下列的赋值语句
 		targetFieldType := xtype.TypeOf(targetField.Type())
 		if _, ok := ctx.IdentityMapping[targetField.Name()]; ok {
-			fieldStmt, fieldID, err := gen.Build(ctx, sourceID, source, targetFieldType)
+			var nextSource = *source
+			switch {
+			case ctx.ZeroCopyStruct:
+				ctx.TargetID = xtype.OtherID(jen.Id(name).Dot(targetField.Name()))
+				if source.Struct {
+					// 为兼容性处理
+					nextSource.Struct = false
+					nextSource.Pointer = true
+					nextSource.PointerInner = source
+				}
+			}
+
+			fieldStmt, fieldID, err := gen.Build(ctx, sourceID, &nextSource, targetFieldType)
 			if err != nil {
 				return nil, nil, err.Lift(&Path{
 					Prefix:     ".",
@@ -74,8 +87,25 @@ func (*Struct) Build(gen Generator, ctx *MethodContext, sourceID *xtype.JenID, s
 					TargetType: targetField.Type().String(),
 				})
 			}
+			mdef, ok := gen.Lookup(ctx, source, targetFieldType)
+			switch {
+			case ok && mdef.ZeroCopyStruct:
+				if targetFieldType.Pointer {
+					_filedStmt := make([]jen.Code, len(fieldStmt)+1)
+					_filedStmt[0] = jen.Id(name).Dot(targetField.Name()).Op("=").Add(jen.New(targetFieldType.PointerInner.TypeAsJen()))
+					copy(_filedStmt[1:], fieldStmt)
+
+					fieldStmt = _filedStmt
+				}
+			}
+
 			stmt = append(stmt, fieldStmt...)
-			stmt = append(stmt, jen.Id(name).Dot(targetField.Name()).Op("=").Add(fieldID.Code))
+
+			switch {
+			case ok && mdef.ZeroCopyStruct:
+			default:
+				stmt = append(stmt, jen.Id(name).Dot(targetField.Name()).Op("=").Add(fieldID.Code))
+			}
 			continue
 		}
 

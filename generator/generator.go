@@ -12,6 +12,7 @@ import (
 	"golang.org/x/text/language"
 	"golang.org/x/tools/go/packages"
 	"sort"
+	"strings"
 )
 
 type generator struct {
@@ -324,11 +325,19 @@ func (g *generator) _lookupExtend(source, target *xtype.Type, sourceID *xtype.Je
 ) {
 	method, ok = g.extend[xtype.Signature{Source: source.T.String(), Target: target.T.String()}]
 	if !ok {
-		source, nextSourceID = optimizeParam(source, sourceID)
-		method, ok = g.extend[xtype.Signature{
-			Source: source.T.String(),
-			Target: target.T.String(),
-		}]
+		if source.Pointer {
+			nextSourceID = xtype.OtherID(jen.Op("*").Add(sourceID.Code.Clone()))
+			method, ok = g.extend[xtype.Signature{
+				Source: strings.TrimLeft(source.T.String(), "*"),
+				Target: target.T.String(),
+			}]
+		} else {
+			nextSourceID = xtype.OtherID(jen.Op("&").Add(sourceID.Code.Clone()))
+			method, ok = g.extend[xtype.Signature{
+				Source: "*" + source.T.String(),
+				Target: target.T.String(),
+			}]
+		}
 
 		return
 	}
