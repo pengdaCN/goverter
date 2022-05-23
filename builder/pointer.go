@@ -102,7 +102,9 @@ func (*TargetPointer) Build(gen Generator, ctx *MethodContext, sourceID *xtype.J
 	)
 	switch {
 	case ctx.ZeroCopyStruct:
+		// TODO 移除该处理
 		nextSourceId = xtype.OtherID(jen.Op("&").Add(sourceID.Code))
+
 		ctx.TargetID = xtype.OtherID(jen.Op("&").Add(jen.Id(innerVar)))
 	default:
 		nextSourceId = sourceID
