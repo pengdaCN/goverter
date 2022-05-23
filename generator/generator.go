@@ -300,6 +300,7 @@ func (g *generator) Lookup(ctx *builder.MethodContext, source, target *xtype.Typ
 }
 
 func (g *generator) _lookup(source, target *xtype.Type) (*builder.MethodDefinition, bool) {
+	// TODO 对扩展函数特殊处理
 	method, ok := g.extend[xtype.Signature{Source: source.T.String(), Target: target.T.String()}]
 	if !ok {
 		method, ok = g.lookup[xtype.Signature{Source: source.T.String(), Target: target.T.String()}]
