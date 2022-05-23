@@ -20,5 +20,4 @@ type MethodDefinition struct {
 	ReturnError      bool
 	ReturnTypeOrigin string
 	Dirty            bool
-	Export           bool
 }
