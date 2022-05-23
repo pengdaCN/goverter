@@ -108,17 +108,19 @@ func (*Struct) Build(gen Generator, ctx *MethodContext, sourceID *xtype.JenID, s
 		if err != nil {
 			return nil, nil, err.Lift(lift...)
 		}
+
+		// TODO 优化此部分逻辑
 		mdef, ok := gen.Lookup(ctx, nextSource, targetFieldType)
-		//switch {
-		//case ok && mdef.ZeroCopyStruct:
-		//	if targetFieldType.Pointer {
-		//		_filedStmt := make([]jen.Code, len(fieldStmt)+1)
-		//		_filedStmt[0] = jen.Id(name).Dot(targetField.Name()).Op("=").Add(jen.New(targetFieldType.PointerInner.TypeAsJen()))
-		//		copy(_filedStmt[1:], fieldStmt)
-		//
-		//		fieldStmt = _filedStmt
-		//	}
-		//}
+		switch {
+		case ok && mdef.ZeroCopyStruct:
+			if targetFieldType.Pointer {
+				_filedStmt := make([]jen.Code, len(fieldStmt)+1)
+				_filedStmt[0] = jen.Id(name).Dot(targetField.Name()).Op("=").Add(jen.New(targetFieldType.PointerInner.TypeAsJen()))
+				copy(_filedStmt[1:], fieldStmt)
+
+				fieldStmt = _filedStmt
+			}
+		}
 
 		stmt = append(stmt, fieldStmt...)
 
