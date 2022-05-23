@@ -184,7 +184,8 @@ func (g *generator) buildNoLookup(ctx *builder.MethodContext, sourceID *xtype.Je
 
 // Build builds an implementation for the given source and target type, or uses an existing method for it.
 func (g *generator) Build(ctx *builder.MethodContext, sourceID *xtype.JenID, source, target *xtype.Type) ([]jen.Code, *xtype.JenID, *builder.Error) {
-	method, ok := g.Lookup(source, target)
+	_source, _target, _sourceID, _targetID := OptimizeParams(ctx, source, target, sourceID, ctx.TargetID)
+	method, ok := g._lookup(_source, _target)
 
 	if ok {
 		var (
@@ -193,11 +194,11 @@ func (g *generator) Build(ctx *builder.MethodContext, sourceID *xtype.JenID, sou
 		if method.SelfAsFirstParam {
 			params = append(params, jen.Id(xtype.ThisVar))
 		}
-		params = append(params, sourceID.Code.Clone())
+		params = append(params, _sourceID.Code.Clone())
 
 		switch {
 		case method.ZeroCopyStruct:
-			params = append(params, ctx.TargetID.Code.Clone())
+			params = append(params, _targetID.Code.Clone())
 		default:
 		}
 
@@ -248,17 +249,17 @@ func (g *generator) Build(ctx *builder.MethodContext, sourceID *xtype.JenID, sou
 		}
 	}
 
-	if (source.Named && !source.Basic) || (target.Named && !target.Basic) {
+	if (_source.Named && !_source.Basic) || (_target.Named && !_target.Basic) {
 		var (
 			name string
 		)
 
 		method := &builder.MethodDefinition{
-			Source: xtype.TypeOf(source.T),
-			Target: xtype.TypeOf(target.T),
+			Source: xtype.TypeOf(_source.T),
+			Target: xtype.TypeOf(_target.T),
 		}
 
-		if source.Struct && target.Struct && ctx.PointerChange && ctx.ZeroCopyStruct {
+		if _source.Struct && _target.Struct && ctx.ZeroCopyStruct {
 			method.ZeroCopyStruct = true
 		}
 		if !method.ZeroCopyStruct {
@@ -274,7 +275,7 @@ func (g *generator) Build(ctx *builder.MethodContext, sourceID *xtype.JenID, sou
 			ctx.PointerChange = false
 		}
 
-		g.lookup[xtype.Signature{Source: source.T.String(), Target: target.T.String()}] = method
+		g.lookup[xtype.Signature{Source: _source.T.String(), Target: _target.T.String()}] = method
 		g.namer.Register(method.Name)
 		if err := g.buildMethod(ctx.Enter(), method); err != nil {
 			return nil, nil, err
@@ -292,11 +293,57 @@ func (g *generator) Build(ctx *builder.MethodContext, sourceID *xtype.JenID, sou
 	return nil, nil, builder.NewError(fmt.Sprintf("TypeMismatch: Cannot convert %s to %s", source.T, target.T))
 }
 
-func (g *generator) Lookup(source, target *xtype.Type) (*builder.MethodDefinition, bool) {
+func (g *generator) Lookup(ctx *builder.MethodContext, source, target *xtype.Type) (*builder.MethodDefinition, bool) {
+	_source, _target, _, _ := OptimizeParams(ctx, source, target, nil, nil)
+
+	return g._lookup(_source, _target)
+}
+
+func (g *generator) _lookup(source, target *xtype.Type) (*builder.MethodDefinition, bool) {
 	method, ok := g.extend[xtype.Signature{Source: source.T.String(), Target: target.T.String()}]
 	if !ok {
 		method, ok = g.lookup[xtype.Signature{Source: source.T.String(), Target: target.T.String()}]
 	}
 
 	return method, ok
+}
+
+func OptimizeParams(ctx *builder.MethodContext, source, target *xtype.Type, sourceID, targetID *xtype.JenID) (
+	finalSource, finalTarget *xtype.Type,
+	nextSourceID, nextTargetID *xtype.JenID,
+) {
+	switch {
+	case ctx.ZeroCopyStruct:
+		finalSource, nextSourceID = optimizeParam(source, sourceID)
+		finalTarget, nextTargetID = optimizeParam(target, targetID)
+
+	default:
+		finalSource, nextSourceID = source, sourceID
+		finalTarget, nextTargetID = target, targetID
+	}
+
+	return
+}
+
+func optimizeParam(param *xtype.Type, id *xtype.JenID) (
+	finalParam *xtype.Type,
+	nextID *xtype.JenID,
+) {
+	switch {
+	case param.Struct:
+		finalParam = param
+		if id != nil {
+			nextID = xtype.OtherID(jen.Op("&").Add(id.Code))
+		}
+
+	case param.Pointer && param.PointerInner.Struct:
+		finalParam = param.PointerInner
+		nextID = id
+
+	default:
+		finalParam = param
+		nextID = id
+	}
+
+	return
 }

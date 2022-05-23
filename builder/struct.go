@@ -25,7 +25,7 @@ func (*Struct) Build(gen Generator, ctx *MethodContext, sourceID *xtype.JenID, s
 		stmt []jen.Code
 	)
 
-	mdef, ok := gen.Lookup(source, target)
+	mdef, ok := gen.Lookup(ctx, source, target)
 	if !ok {
 		NewError("not found MethodDefinition").Lift(&Path{
 			Prefix:     ".",
@@ -91,12 +91,34 @@ func (*Struct) Build(gen Generator, ctx *MethodContext, sourceID *xtype.JenID, s
 		}
 		stmt = append(stmt, mapStmt...)
 
+		switch {
+		case ctx.ZeroCopyStruct:
+			ctx.TargetID = xtype.OtherID(jen.Id(name).Dot(targetField.Name()))
+		}
+
 		fieldStmt, fieldID, err := gen.Build(ctx, xtype.VariableID(nextID), nextSource, targetFieldType)
 		if err != nil {
 			return nil, nil, err.Lift(lift...)
 		}
+		mdef, ok := gen.Lookup(ctx, nextSource, targetFieldType)
+		//switch {
+		//case ok && mdef.ZeroCopyStruct:
+		//	if targetFieldType.Pointer {
+		//		_filedStmt := make([]jen.Code, len(fieldStmt)+1)
+		//		_filedStmt[0] = jen.Id(name).Dot(targetField.Name()).Op("=").Add(jen.New(targetFieldType.PointerInner.TypeAsJen()))
+		//		copy(_filedStmt[1:], fieldStmt)
+		//
+		//		fieldStmt = _filedStmt
+		//	}
+		//}
+
 		stmt = append(stmt, fieldStmt...)
-		stmt = append(stmt, jen.Id(name).Dot(targetField.Name()).Op("=").Add(fieldID.Code))
+
+		switch {
+		case ok && mdef.ZeroCopyStruct:
+		default:
+			stmt = append(stmt, jen.Id(name).Dot(targetField.Name()).Op("=").Add(fieldID.Code))
+		}
 	}
 
 	return stmt, xtype.VariableID(jen.Id(name)), nil
