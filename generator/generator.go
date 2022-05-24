@@ -325,14 +325,19 @@ func (g *generator) _lookupExtend(source, target *xtype.Type, sourceID *xtype.Je
 ) {
 	method, ok = g.extend[xtype.Signature{Source: source.T.String(), Target: target.T.String()}]
 	if !ok {
-		if source.Pointer {
+		if source.Pointer && source.PointerType != nil {
 			nextSourceID = xtype.OtherID(jen.Op("*").Add(sourceID.Code.Clone()))
 			method, ok = g.extend[xtype.Signature{
 				Source: strings.TrimLeft(source.T.String(), "*"),
 				Target: target.T.String(),
 			}]
 		} else {
-			nextSourceID = xtype.OtherID(jen.Op("&").Add(sourceID.Code.Clone()))
+			if !source.Pointer {
+				nextSourceID = xtype.OtherID(jen.Op("&").Add(sourceID.Code.Clone()))
+			} else {
+				nextSourceID = sourceID
+			}
+
 			method, ok = g.extend[xtype.Signature{
 				Source: "*" + source.T.String(),
 				Target: target.T.String(),
