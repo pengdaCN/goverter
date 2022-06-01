@@ -306,6 +306,10 @@ func (g *generator) Build(ctx *builder.MethodContext, sourceID *xtype.JenID, sou
 	return nil, nil, builder.NewError(fmt.Sprintf("TypeMismatch: Cannot convert %s to %s", source.T, target.T))
 }
 
+func (g *generator) Name() string {
+	return g.name
+}
+
 func (g *generator) Lookup(ctx *builder.MethodContext, source, target *xtype.Type) (*builder.MethodDefinition, bool) {
 	_source, _target, _, _ := OptimizeParams(ctx, source, target, nil, nil)
 

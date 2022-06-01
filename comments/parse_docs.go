@@ -64,6 +64,7 @@ func (c *Converter) BuildCtx(method string) *builder.MethodContext {
 			IdentityMapping: m.IdentityMapping,
 			NoStrict:        m.NoStrict,
 			ZeroCopyStruct:  m.ZeroCopy,
+			ID:              method,
 		}
 
 	} else {

@@ -19,6 +19,7 @@ type Builder interface {
 type Generator interface {
 	Build(ctx *MethodContext, sourceID *xtype.JenID, source, target *xtype.Type) ([]jen.Code, *xtype.JenID, *Error)
 	Lookup(ctx *MethodContext, source, target *xtype.Type) (*MethodDefinition, bool)
+	Name() string
 }
 
 // MethodContext exposes information for the current method.
@@ -34,6 +35,7 @@ type MethodContext struct {
 	NoStrict        bool
 	ZeroCopyStruct  bool
 	TargetID        *xtype.JenID
+	ID              string
 }
 
 func (m *MethodContext) Enter() *MethodContext {
@@ -46,5 +48,6 @@ func (m *MethodContext) Enter() *MethodContext {
 		PointerChange:   m.PointerChange,
 		NoStrict:        m.NoStrict,
 		ZeroCopyStruct:  m.ZeroCopyStruct,
+		ID:              m.ID,
 	}
 }
