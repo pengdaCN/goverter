@@ -8,7 +8,7 @@ import (
 )
 
 // loadPackages is used to load extend packages, with caching support.
-func (g *generator) loadPackages(pkgPath string) ([]*packages.Package, error) {
+func (g *parseExtendContext) loadPackages(pkgPath string) ([]*packages.Package, error) {
 	if pkgs, ok := g.pkgCache[pkgPath]; ok {
 		return pkgs, nil
 	}

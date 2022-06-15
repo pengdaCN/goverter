@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/jmattheis/goverter/builder"
 	"go/types"
+	"golang.org/x/tools/go/packages"
 	"regexp"
 	"strings"
 
@@ -17,6 +18,14 @@ const (
 	// in goverter:extend input with package path.
 	packageNameSep = ":"
 )
+
+type parseExtendContext struct {
+	//extend map[xtype.Signature]*builder.MethodDefinition
+	// pkgCache caches the extend packages, saving load time
+	pkgCache map[string][]*packages.Package
+	// workingDir is a working directory, can be empty
+	workingDir string
+}
 
 // ParseExtendOptions holds extend method options.
 type ParseExtendOptions struct {
@@ -43,10 +52,10 @@ type ParseExtendOptions struct {
 // Note: if regexp pattern is used, only the methods matching the conversion signature can be used.
 // Those are methods that have exactly one input (to convert from) and either one output (to covert to)
 // or two outputs: type to convert to and an error object.
-func (g *generator) parseExtendPackage(opts *ParseExtendOptions) error {
+func (g *parseExtendContext) parseExtendPackage(opts *ParseExtendOptions, extend map[xtype.Signature]*builder.MethodDefinition) error {
 	if opts.PkgPath == "" {
 		// search in the converter's scope
-		loaded, err := g.searchExtendsInScope(opts.ConverterScope, opts)
+		loaded, err := g.searchExtendsInScope(opts.ConverterScope, opts, extend)
 		if err == nil && loaded == 0 {
 			// no failure, but also nothing found (this can happen if pattern is used yet no matches found)
 			err = fmt.Errorf("local package does not have methods with names that match "+
@@ -55,14 +64,14 @@ func (g *generator) parseExtendPackage(opts *ParseExtendOptions) error {
 		return err
 	}
 
-	return g.searchExtendsInPackages(opts)
+	return g.searchExtendsInPackages(opts, extend)
 }
 
 // searchExtendsInPackages searches for extend conversion methods that match an input regexp pattern
 // within a given package path.
 // Note: if this method finds no candidates, it will report an error. Two reasons for that:
 // scanning packages takes time and it is very likely a human error.
-func (g *generator) searchExtendsInPackages(opts *ParseExtendOptions) error {
+func (g *parseExtendContext) searchExtendsInPackages(opts *ParseExtendOptions, extend map[xtype.Signature]*builder.MethodDefinition) error {
 	// load a package by its path, loadPackages uses cache
 	pkgs, err := g.loadPackages(opts.PkgPath)
 	if err != nil {
@@ -72,7 +81,7 @@ func (g *generator) searchExtendsInPackages(opts *ParseExtendOptions) error {
 	var loaded int
 	for _, pkg := range pkgs {
 		// search in the scope of each package, first package is going to be the root one
-		pkgLoaded, pkgErr := g.searchExtendsInScope(pkg.Types.Scope(), opts)
+		pkgLoaded, pkgErr := g.searchExtendsInScope(pkg.Types.Scope(), opts, extend)
 		if pkgErr != nil {
 			if err == nil {
 				// remember the first err only - it is likely the most relevant if name is exact
@@ -97,11 +106,11 @@ the golang regexp pattern %q and a convert signature`, opts.PkgPath, opts.NamePa
 // searchExtendsInScope searches the given package scope (either local or external) for
 // the conversion method candidates. See parseExtendPackage for more details.
 // If the input scope is not local, always pass converterInterface as a nil.
-func (g *generator) searchExtendsInScope(scope *types.Scope, opts *ParseExtendOptions) (int, error) {
+func (g *parseExtendContext) searchExtendsInScope(scope *types.Scope, opts *ParseExtendOptions, extend map[xtype.Signature]*builder.MethodDefinition) (int, error) {
 	if prefix, complete := opts.NamePattern.LiteralPrefix(); complete {
 		// this is not a regexp, use regular lookup and report error as is
 		// we expect only one function to match
-		return 1, g.parseExtendScopeMethod(scope, prefix, opts)
+		return 1, g.parseExtendScopeMethod(scope, prefix, opts, extend)
 	}
 
 	// this is regexp, scan thru the package methods to find funcs that match the pattern
@@ -124,7 +133,7 @@ func (g *generator) searchExtendsInScope(scope *types.Scope, opts *ParseExtendOp
 			continue
 		}
 
-		err := g.parseExtendFunc(fn, opts)
+		err := g.parseExtendFunc(fn, opts, extend)
 		if err == nil {
 			loaded++
 		}
@@ -133,7 +142,8 @@ func (g *generator) searchExtendsInScope(scope *types.Scope, opts *ParseExtendOp
 }
 
 // parseExtend prepares a list of extend methods for use.
-func (g *generator) parseExtend(converterInterface types.Type, converterScope *types.Scope, methods []string) error {
+func (g *parseExtendContext) parseExtend(converterInterface types.Type, converterScope *types.Scope, methods []string) (map[xtype.Signature]*builder.MethodDefinition, error) {
+	extend := make(map[xtype.Signature]*builder.MethodDefinition)
 	for _, methodName := range methods {
 		parts := strings.SplitN(methodName, packageNameSep, 2)
 		var pkgPath, namePattern string
@@ -151,19 +161,19 @@ func (g *generator) parseExtend(converterInterface types.Type, converterScope *t
 			if pkgPath == "" {
 				// example: goverter:extend :MyLocalConvert
 				// the purpose of the ':' in this case is confusing, do not allow such case
-				return fmt.Errorf(`package path must not be empty in the extend statement "%s".
+				return nil, fmt.Errorf(`package path must not be empty in the extend statement "%s".
 See https://github.com/jmattheis/goverter#extend-with-custom-implementation`, methodName)
 			}
 			namePattern = parts[1]
 			if namePattern == "" {
-				return fmt.Errorf(`method name pattern is required in the extend statement "%s".
+				return nil, fmt.Errorf(`method name pattern is required in the extend statement "%s".
 See https://github.com/jmattheis/goverter#extend-with-custom-implementation`, methodName)
 			}
 		}
 
 		pattern, err := regexp.Compile(namePattern)
 		if err != nil {
-			return errors.Wrapf(err, "could not parse name as regexp %q", namePattern)
+			return nil, errors.Wrapf(err, "could not parse name as regexp %q", namePattern)
 		}
 
 		opts := &ParseExtendOptions{
@@ -173,16 +183,16 @@ See https://github.com/jmattheis/goverter#extend-with-custom-implementation`, me
 			ConverterInterface: converterInterface,
 		}
 
-		err = g.parseExtendPackage(opts)
+		err = g.parseExtendPackage(opts, extend)
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
-	return nil
+	return extend, nil
 }
 
 // parseExtend prepares an extend conversion method using its name and a scope to search.
-func (g *generator) parseExtendScopeMethod(scope *types.Scope, methodName string, opts *ParseExtendOptions) error {
+func (g *parseExtendContext) parseExtendScopeMethod(scope *types.Scope, methodName string, opts *ParseExtendOptions, extend map[xtype.Signature]*builder.MethodDefinition) error {
 	obj := scope.Lookup(methodName)
 	if obj == nil {
 		return fmt.Errorf("%s does not exist in scope", methodName)
@@ -193,11 +203,11 @@ func (g *generator) parseExtendScopeMethod(scope *types.Scope, methodName string
 		return fmt.Errorf("%s is not a function", methodName)
 	}
 
-	return g.parseExtendFunc(fn, opts)
+	return g.parseExtendFunc(fn, opts, extend)
 }
 
 // parseExtend prepares an extend conversion method using its func pointer.
-func (g *generator) parseExtendFunc(fn *types.Func, opts *ParseExtendOptions) error {
+func (g *parseExtendContext) parseExtendFunc(fn *types.Func, opts *ParseExtendOptions, extend map[xtype.Signature]*builder.MethodDefinition) error {
 	if !fn.Exported() {
 		return fmt.Errorf("method %s is unexported", fn.Name())
 	}
@@ -250,6 +260,7 @@ func (g *generator) parseExtendFunc(fn *types.Func, opts *ParseExtendOptions) er
 		ReturnError:      returnError,
 		ReturnTypeOrigin: fn.String(),
 	}
-	g.extend[xsig] = methodDef
+
+	extend[xsig] = methodDef
 	return nil
 }

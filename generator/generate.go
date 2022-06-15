@@ -45,12 +45,11 @@ func Generate(pattern string, mapping []comments.Converter, config Config) (*jen
 		file.Type().Id(converter.Config.Name).Struct()
 
 		gen := generator{
-			namer:      namer.New(),
-			file:       file,
-			name:       converter.Config.Name,
-			lookup:     map[xtype.Signature]*builder.MethodDefinition{},
-			extend:     map[xtype.Signature]*builder.MethodDefinition{},
-			workingDir: config.WorkingDir,
+			namer:  namer.New(),
+			file:   file,
+			name:   converter.Config.Name,
+			lookup: map[xtype.Signature]*builder.MethodDefinition{},
+			extend: map[xtype.Signature]*builder.MethodDefinition{},
 		}
 		interf := obj.Type().Underlying().(*types.Interface)
 
@@ -61,13 +60,21 @@ func Generate(pattern string, mapping []comments.Converter, config Config) (*jen
 		extendMethods = append(extendMethods, config.ExtendMethods...)
 		extendMethods = append(extendMethods, converter.Config.ExtendMethods...)
 
-		if err := gen.parseExtend(obj.Type(), converter.Scope, extendMethods); err != nil {
+		parseExtendCtx.workingDir = config.WorkingDir
+		extend, err := parseExtendCtx.parseExtend(obj.Type(), converter.Scope, extendMethods)
+		if err != nil {
 			return nil, fmt.Errorf("Error while parsing extend in\n    %s\n\n%s", obj.Type().String(), err)
 		}
+		gen.extend = extend
 
 		// we checked in comments, that it is an interface
 		for i := 0; i < interf.NumMethods(); i++ {
 			method := interf.Method(i)
+
+			m, ok := converter.Methods[method.Name()]
+			if ok {
+
+			}
 
 			if err := gen.registerMethod(method); err != nil {
 				return nil, fmt.Errorf("Error while creating converter method:\n    %s\n\n%s", method.String(), err)

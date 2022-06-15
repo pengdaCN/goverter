@@ -20,11 +20,12 @@ type generator struct {
 	name   string
 	file   *jen.File
 	lookup map[xtype.Signature]*builder.MethodDefinition
+	// TODO deleted
 	extend map[xtype.Signature]*builder.MethodDefinition
 	// pkgCache caches the extend packages, saving load time
 	pkgCache map[string][]*packages.Package
 	// workingDir is a working directory, can be empty
-	workingDir string
+	//workingDir string
 }
 
 func (g *generator) registerMethod(methodType *types.Func) error {

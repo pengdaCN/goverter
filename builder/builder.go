@@ -28,6 +28,8 @@ type MethodContext struct {
 	Mapping         map[string]string
 	IgnoredFields   map[string]struct{}
 	IdentityMapping map[string]struct{}
+	GlobalExtend    map[xtype.Signature]*MethodDefinition
+	MethodExtend    map[xtype.Signature]*MethodDefinition
 	Signature       xtype.Signature
 	TargetType      *xtype.Type
 	PointerChange   bool
@@ -44,6 +46,8 @@ func (m *MethodContext) Enter() *MethodContext {
 		Mapping:         m.Mapping,
 		IgnoredFields:   m.IgnoredFields,
 		IdentityMapping: m.IdentityMapping,
+		GlobalExtend:    m.GlobalExtend,
+		MethodExtend:    m.MethodExtend,
 		MatchIgnoreCase: m.MatchIgnoreCase,
 		PointerChange:   m.PointerChange,
 		NoStrict:        m.NoStrict,

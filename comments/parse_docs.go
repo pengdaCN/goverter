@@ -52,6 +52,7 @@ type Method struct {
 	IdentityMapping map[string]struct{}
 	NoStrict        bool
 	ZeroCopy        bool
+	ExtendMethods   []string
 }
 
 func (c *Converter) BuildCtx(method string) *builder.MethodContext {
@@ -259,6 +260,9 @@ func parseMethodComment(comment string) (Method, error) {
 				continue
 			case "zeroCopy":
 				m.ZeroCopy = true
+				continue
+			case "extend":
+				m.ExtendMethods = append(m.ExtendMethods, fields[1:]...)
 				continue
 			}
 			return m, fmt.Errorf("unknown %s comment: %s", prefix, line)
