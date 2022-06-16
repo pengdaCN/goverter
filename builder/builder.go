@@ -18,6 +18,7 @@ type Builder interface {
 // If no one Builder#Matches then, an error is returned.
 type Generator interface {
 	Build(ctx *MethodContext, sourceID *xtype.JenID, source, target *xtype.Type) ([]jen.Code, *xtype.JenID, *Error)
+	// TODO delete
 	Lookup(ctx *MethodContext, source, target *xtype.Type) (*MethodDefinition, bool)
 	Name() string
 }
