@@ -18,10 +18,6 @@ type generator struct {
 	name   string
 	file   *jen.File
 	lookup map[xtype.Signature]*builder.MethodDefinition
-	// pkgCache caches the extend packages, saving load time
-	//pkgCache map[string][]*packages.Package
-	// workingDir is a working directory, can be empty
-	//workingDir string
 }
 
 func (g *generator) registerMethod(methodType *types.Func) error {
@@ -172,8 +168,6 @@ func (g *generator) buildNoLookup(ctx *builder.MethodContext, sourceID *xtype.Je
 // Build builds an implementation for the given source and target type, or uses an existing method for it.
 func (g *generator) Build(ctx *builder.MethodContext, sourceID *xtype.JenID, source, target *xtype.Type) ([]jen.Code, *xtype.JenID, *builder.Error) {
 	var (
-		_source   = source
-		_target   = target
 		_sourceID = sourceID
 		_targetID *xtype.JenID
 		method    *builder.MethodDefinition
@@ -182,9 +176,9 @@ func (g *generator) Build(ctx *builder.MethodContext, sourceID *xtype.JenID, sou
 
 	_sourceID, _targetID, method, ok = _lookupExtend(ctx, source, target, sourceID)
 	if !ok {
-		// TODO 修改逻辑
-		_source, _target, _sourceID, _targetID = OptimizeParams(ctx, source, target, sourceID, ctx.TargetID)
-		method, ok = g._lookup(_source, _target)
+		_sourceID = sourceID
+		_targetID = ctx.TargetID
+		method, ok = g._lookup(source, target)
 	}
 
 	if ok {
@@ -249,17 +243,17 @@ func (g *generator) Build(ctx *builder.MethodContext, sourceID *xtype.JenID, sou
 		}
 	}
 
-	if (_source.Named && !_source.Basic) || (_target.Named && !_target.Basic) {
+	if (source.Named && !source.Basic) || (target.Named && !target.Basic) {
 		var (
 			name string
 		)
 
 		m := &builder.MethodDefinition{
-			Source: xtype.TypeOf(_source.T),
-			Target: xtype.TypeOf(_target.T),
+			Source: xtype.TypeOf(source.T),
+			Target: xtype.TypeOf(target.T),
 		}
 
-		if _source.Pointer && _target.Pointer && _source.PointerInner.Struct && _target.PointerInner.Struct {
+		if source.Pointer && target.Pointer && source.PointerInner.Struct && target.PointerInner.Struct {
 			m.Kind = xtype.InSourceIn2Target
 		}
 
@@ -278,7 +272,7 @@ func (g *generator) Build(ctx *builder.MethodContext, sourceID *xtype.JenID, sou
 			ctx.PointerChange = false
 		}
 
-		g.lookup[xtype.Signature{Source: _source.T.String(), Target: _target.T.String(), Kind: m.Kind}] = method
+		g.lookup[xtype.Signature{Source: source.T.String(), Target: target.T.String(), Kind: m.Kind}] = method
 		g.namer.Register(m.Name)
 		if err := g.buildMethod(ctx.Enter(), m); err != nil {
 			return nil, nil, err
@@ -300,14 +294,24 @@ func (g *generator) Name() string {
 	return g.name
 }
 
+// Lookup TODO delete
 func (g *generator) Lookup(ctx *builder.MethodContext, source, target *xtype.Type) (*builder.MethodDefinition, bool) {
-	_source, _target, _, _ := OptimizeParams(ctx, source, target, nil, nil)
-
-	return g._lookup(_source, _target)
+	return nil, false
 }
 
 func (g *generator) _lookup(source, target *xtype.Type) (*builder.MethodDefinition, bool) {
-	method, ok := g.lookup[xtype.Signature{Source: source.T.String(), Target: target.T.String()}]
+	// 优先使用InSourceIn2Target类型函数
+	var sign = xtype.Signature{
+		Source: source.T.String(),
+		Target: target.T.String(),
+		Kind:   xtype.InSourceIn2Target,
+	}
+
+	method, ok := g.lookup[sign]
+	if !ok {
+		sign.Kind = xtype.InSourceOutTarget
+		method, ok = g.lookup[sign]
+	}
 
 	return method, ok
 }
@@ -403,94 +407,6 @@ func _lookupExtend(ctx *builder.MethodContext, source, target *xtype.Type, sourc
 				}
 			}
 		}
-	}
-
-	return
-	//method, ok = ctx.MethodExtend[xtype.Signature{
-	//	Source: source.T.String(),
-	//	Target: target.T.String(),
-	//}]
-	//if !ok {
-	//	method, ok = ctx.GlobalExtend[xtype.Signature{
-	//		Source: source.T.String(),
-	//		Target: target.T.String(),
-	//	}]
-	//}
-	//if !ok {
-	//	if source.Pointer && source.PointerType != nil {
-	//		nextSourceID = xtype.OtherID(jen.Op("*").Add(sourceID.Code.Clone()))
-	//		method, ok = ctx.GlobalExtend[xtype.Signature{
-	//			Source: strings.TrimLeft(source.T.String(), "*"),
-	//			Target: target.T.String(),
-	//		}]
-	//		if !ok {
-	//			method, ok = ctx.GlobalExtend[xtype.Signature{
-	//				Source: strings.TrimLeft(source.T.String(), "*"),
-	//				Target: target.T.String(),
-	//			}]
-	//		}
-	//	} else {
-	//		if !source.Pointer {
-	//			nextSourceID = xtype.OtherID(jen.Op("&").Add(sourceID.Code.Clone()))
-	//		} else {
-	//			nextSourceID = sourceID
-	//		}
-	//
-	//		method, ok = ctx.MethodExtend[xtype.Signature{
-	//			Source: "*" + source.T.String(),
-	//			Target: target.T.String(),
-	//		}]
-	//		if !ok {
-	//			method, ok = ctx.GlobalExtend[xtype.Signature{
-	//				Source: "*" + source.T.String(),
-	//				Target: target.T.String(),
-	//			}]
-	//		}
-	//	}
-	//
-	//	return
-	//}
-	//
-	//nextSourceID = sourceID
-	//
-	//return
-}
-
-func OptimizeParams(ctx *builder.MethodContext, source, target *xtype.Type, sourceID, targetID *xtype.JenID) (
-	finalSource, finalTarget *xtype.Type,
-	nextSourceID, nextTargetID *xtype.JenID,
-) {
-	switch {
-	case ctx.ZeroCopyStruct:
-		finalSource, nextSourceID = optimizeParam(source, sourceID)
-		finalTarget, nextTargetID = optimizeParam(target, targetID)
-
-	default:
-		finalSource, nextSourceID = source, sourceID
-		finalTarget, nextTargetID = target, targetID
-	}
-
-	return
-}
-
-func optimizeParam(param *xtype.Type, id *xtype.JenID) (
-	finalParam *xtype.Type,
-	nextID *xtype.JenID,
-) {
-	switch {
-	case param.Struct:
-		finalParam = param
-		if id != nil {
-			nextID = xtype.OtherID(jen.Op("&").Add(id.Code))
-		}
-
-	case param.Pointer && param.PointerInner.Struct:
-		finalParam = param.PointerInner
-		nextID = id
-
-	default:
-		finalParam = param
-		nextID = id
 	}
 
 	return
