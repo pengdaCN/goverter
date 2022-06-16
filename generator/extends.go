@@ -215,7 +215,11 @@ func (g *parseExtendContext) parseExtendFunc(fn *types.Func, opts *ParseExtendOp
 	if err != nil {
 		return err
 	}
-	xsig := xtype.Signature{Source: m.Source.T.String(), Target: m.Target.T.String()}
+	xsig := xtype.Signature{
+		Source: m.Source.T.String(),
+		Target: m.Target.T.String(),
+		Kind:   m.Kind,
+	}
 
 	extend[xsig] = m
 	return nil

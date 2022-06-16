@@ -15,7 +15,15 @@ const ThisVar = "c"
 type Signature struct {
 	Source string
 	Target string
+	Kind   MethodKind
 }
+
+type MethodKind byte
+
+const (
+	InSourceOutTarget MethodKind = iota + 1
+	InSourceIn2Target
+)
 
 // Type is a helper wrapper for types.Type.
 type Type struct {

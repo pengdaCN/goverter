@@ -30,8 +30,9 @@ func ParseMethod(method *types.Func, opts ...ParseOpt) (*builder.MethodDefinitio
 	var (
 		source               types.Type
 		target               types.Type
+		advTarget            *xtype.Type
 		maybeErr             types.Type
-		kind                 builder.MethodKind
+		kind                 xtype.MethodKind
 		selfAsFirstParameter bool
 		returnError          bool
 	)
@@ -48,14 +49,14 @@ func ParseMethod(method *types.Func, opts ...ParseOpt) (*builder.MethodDefinitio
 
 	switch {
 	case len(params) == 1 && len(result) <= 2:
-		kind = builder.InSourceOutTarget
+		kind = xtype.InSourceOutTarget
 		source = params[0].Type()
 		target = result[0].Type()
 		if len(result) == 2 {
 			maybeErr = result[1].Type()
 		}
 	case len(params) == 2 && len(result) <= 1:
-		kind = builder.InSourceIn2Target
+		kind = xtype.InSourceIn2Target
 		source = params[0].Type()
 		target = params[1].Type()
 		if len(result) == 1 {
@@ -74,6 +75,13 @@ func ParseMethod(method *types.Func, opts ...ParseOpt) (*builder.MethodDefinitio
 		}
 	}
 
+	advTarget = xtype.TypeOf(target)
+	if kind == xtype.InSourceIn2Target {
+		if !advTarget.Pointer {
+			return nil, fmt.Errorf("the second parameter must be pointer type but had: %s", target.String())
+		}
+	}
+
 	return &builder.MethodDefinition{
 		Call:             jen.Id(xtype.ThisVar).Dot(method.Name()),
 		ID:               method.String(),
@@ -81,7 +89,7 @@ func ParseMethod(method *types.Func, opts ...ParseOpt) (*builder.MethodDefinitio
 		SelfAsFirstParam: selfAsFirstParameter,
 		Kind:             kind,
 		Source:           xtype.TypeOf(source),
-		Target:           xtype.TypeOf(target),
+		Target:           advTarget,
 		ReturnError:      returnError,
 		ReturnTypeOrigin: method.FullName(),
 	}, nil

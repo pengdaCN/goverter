@@ -5,13 +5,6 @@ import (
 	"github.com/jmattheis/goverter/xtype"
 )
 
-type MethodKind byte
-
-const (
-	InSourceOutTarget MethodKind = iota + 1
-	InSourceIn2Target
-)
-
 type MethodDefinition struct {
 	ID       string
 	Explicit bool
@@ -21,8 +14,7 @@ type MethodDefinition struct {
 	Target   *xtype.Type
 	// TODO delete
 	ZeroCopyStruct bool
-
-	Kind MethodKind
+	Kind           xtype.MethodKind
 
 	Jen jen.Code
 

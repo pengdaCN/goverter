@@ -35,6 +35,7 @@ func (g *generator) registerMethod(methodType *types.Func) error {
 	g.lookup[xtype.Signature{
 		Source: m.Source.T.String(),
 		Target: m.Target.T.String(),
+		Kind:   m.Kind,
 	}] = m
 	g.namer.Register(m.Name)
 	return nil
@@ -104,7 +105,7 @@ func (g *generator) buildMethod(ctx *builder.MethodContext, method *builder.Meth
 	}
 
 	ctx.TargetType = target
-	ctx.Signature = xtype.Signature{Source: method.Source.T.String(), Target: method.Target.T.String()}
+	ctx.Signature = xtype.Signature{Source: method.Source.T.String(), Target: method.Target.T.String(), Kind: method.Kind}
 
 	stmt, newID, err := g.buildNoLookup(ctx, xtype.VariableID(sourceID.Clone()), source, target)
 	if err != nil {
