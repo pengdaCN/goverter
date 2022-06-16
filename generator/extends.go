@@ -8,7 +8,6 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/dave/jennifer/jen"
 	"github.com/jmattheis/goverter/xtype"
 	"github.com/pkg/errors"
 )
@@ -212,55 +211,12 @@ func (g *parseExtendContext) parseExtendFunc(fn *types.Func, opts *ParseExtendOp
 		return fmt.Errorf("method %s is unexported", fn.Name())
 	}
 
-	sig, ok := fn.Type().(*types.Signature)
-	if !ok {
-		return fmt.Errorf("%s has no signature", fn.Name())
+	m, err := ParseMethod(fn, UseConverterInter(opts.ConverterInterface))
+	if err != nil {
+		return err
 	}
-	if sig.Params().Len() == 0 || sig.Results().Len() > 2 {
-		return fmt.Errorf("%s has no or too many parameters", fn.Name())
-	}
-	if sig.Results().Len() == 0 || sig.Results().Len() > 2 {
-		return fmt.Errorf("%s has no or too many returns", fn.Name())
-	}
+	xsig := xtype.Signature{Source: m.Source.T.String(), Target: m.Target.T.String()}
 
-	source := sig.Params().At(0).Type()
-	target := sig.Results().At(0).Type()
-	returnError := false
-	if sig.Results().Len() == 2 {
-		if i, ok := sig.Results().At(1).Type().(*types.Named); ok && i.Obj().Name() == "error" && i.Obj().Pkg() == nil {
-			returnError = true
-		} else {
-			return fmt.Errorf("second return parameter must have type error but had: %s", sig.Results().At(1).Type())
-		}
-	}
-
-	selfAsFirstParameter := false
-	if sig.Params().Len() == 2 {
-		if opts.ConverterInterface == nil {
-			// converterInterface is used when searching for methods in the local package only
-			return fmt.Errorf("%s should have one parameter when using extend with a package", fn.Name())
-		}
-		if source.String() == opts.ConverterInterface.String() {
-			selfAsFirstParameter = true
-			source = sig.Params().At(1).Type()
-		} else {
-			return fmt.Errorf("the first parameter must be of type %s", opts.ConverterInterface.String())
-		}
-	}
-
-	xsig := xtype.Signature{Source: source.String(), Target: target.String()}
-	methodDef := &builder.MethodDefinition{
-		ID:               fn.String(),
-		Explicit:         true,
-		Call:             jen.Qual(fn.Pkg().Path(), fn.Name()),
-		Name:             fn.Name(),
-		Source:           xtype.TypeOf(source),
-		Target:           xtype.TypeOf(target),
-		SelfAsFirstParam: selfAsFirstParameter,
-		ReturnError:      returnError,
-		ReturnTypeOrigin: fn.String(),
-	}
-
-	extend[xsig] = methodDef
+	extend[xsig] = m
 	return nil
 }

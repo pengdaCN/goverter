@@ -26,43 +26,15 @@ type generator struct {
 }
 
 func (g *generator) registerMethod(methodType *types.Func) error {
-	signature, ok := methodType.Type().(*types.Signature)
-	if !ok {
-		return fmt.Errorf("expected signature %#v", methodType.Type())
+	m, err := ParseMethod(methodType)
+	if err != nil {
+		return err
 	}
-	params := signature.Params()
-	if params.Len() != 1 {
-		return fmt.Errorf("expected signature to have only one parameter")
-	}
-	result := signature.Results()
-	if result.Len() < 1 || result.Len() > 2 {
-		return fmt.Errorf("return has no or too many parameters")
-	}
-	source := params.At(0).Type()
-	target := result.At(0).Type()
-	returnError := false
-	if result.Len() == 2 {
-		if i, ok := result.At(1).Type().(*types.Named); ok && i.Obj().Name() == "error" && i.Obj().Pkg() == nil {
-			returnError = true
-		} else {
-			return fmt.Errorf("second return parameter must have type error but had: %s", result.At(1).Type())
-		}
-	}
-
-	m := &builder.MethodDefinition{
-		Call:             jen.Id(xtype.ThisVar).Dot(methodType.Name()),
-		ID:               methodType.String(),
-		Explicit:         true,
-		Name:             methodType.Name(),
-		Source:           xtype.TypeOf(source),
-		Target:           xtype.TypeOf(target),
-		ReturnError:      returnError,
-		ReturnTypeOrigin: methodType.FullName(),
-	}
+	m.Explicit = true
 
 	g.lookup[xtype.Signature{
-		Source: source.String(),
-		Target: target.String(),
+		Source: m.Source.T.String(),
+		Target: m.Target.T.String(),
 	}] = m
 	g.namer.Register(m.Name)
 	return nil
