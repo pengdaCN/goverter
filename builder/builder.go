@@ -18,7 +18,9 @@ type Builder interface {
 // If no one Builder#Matches then, an error is returned.
 type Generator interface {
 	Build(ctx *MethodContext, sourceID *xtype.JenID, source, target *xtype.Type) ([]jen.Code, *xtype.JenID, *Error)
+	// TODO delete
 	Lookup(ctx *MethodContext, source, target *xtype.Type) (*MethodDefinition, bool)
+	Name() string
 }
 
 // MethodContext exposes information for the current method.
@@ -27,6 +29,8 @@ type MethodContext struct {
 	Mapping         map[string]string
 	IgnoredFields   map[string]struct{}
 	IdentityMapping map[string]struct{}
+	GlobalExtend    map[xtype.Signature]*MethodDefinition
+	MethodExtend    map[xtype.Signature]*MethodDefinition
 	Signature       xtype.Signature
 	TargetType      *xtype.Type
 	PointerChange   bool
@@ -34,6 +38,7 @@ type MethodContext struct {
 	NoStrict        bool
 	ZeroCopyStruct  bool
 	TargetID        *xtype.JenID
+	ID              string
 }
 
 func (m *MethodContext) Enter() *MethodContext {
@@ -42,9 +47,12 @@ func (m *MethodContext) Enter() *MethodContext {
 		Mapping:         m.Mapping,
 		IgnoredFields:   m.IgnoredFields,
 		IdentityMapping: m.IdentityMapping,
+		GlobalExtend:    m.GlobalExtend,
+		MethodExtend:    m.MethodExtend,
 		MatchIgnoreCase: m.MatchIgnoreCase,
 		PointerChange:   m.PointerChange,
 		NoStrict:        m.NoStrict,
 		ZeroCopyStruct:  m.ZeroCopyStruct,
+		ID:              m.ID,
 	}
 }
