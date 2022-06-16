@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"github.com/jmattheis/goverter/builder"
+	"github.com/jmattheis/goverter/xtype"
 	"go/ast"
 	"go/types"
 	"sort"
@@ -31,10 +32,12 @@ type ParseDocsConfig struct {
 
 // Converter defines a converter that was marked with converterMarker.
 type Converter struct {
-	Name    string
-	Config  ConverterConfig
-	Methods MethodMapping
-	Scope   *types.Scope
+	Name           string
+	Config         ConverterConfig
+	Methods        MethodMapping
+	Scope          *types.Scope
+	globalExtend   map[xtype.Signature]*builder.MethodDefinition
+	specificExtend map[string]map[xtype.Signature]*builder.MethodDefinition
 }
 
 // ConverterConfig contains settings that can be set via comments.
@@ -59,6 +62,8 @@ func (c *Converter) BuildCtx(method string) *builder.MethodContext {
 	m, ok := c.Methods[method]
 	if ok {
 		return &builder.MethodContext{
+			GlobalExtend:    c.globalExtend,
+			MethodExtend:    c.getSpecificExtend(method),
 			Mapping:         m.NameMapping,
 			MatchIgnoreCase: m.MatchIgnoreCase,
 			IgnoredFields:   m.IgnoredFields,
@@ -69,8 +74,43 @@ func (c *Converter) BuildCtx(method string) *builder.MethodContext {
 		}
 
 	} else {
-		return &builder.MethodContext{}
+		return &builder.MethodContext{
+			GlobalExtend: c.getGlobalExtend(),
+		}
 	}
+}
+
+func (c *Converter) getSpecificExtend(method string) map[xtype.Signature]*builder.MethodDefinition {
+	if c.specificExtend == nil {
+		return emptyExtend
+	}
+
+	extend, ok := c.specificExtend[method]
+	if !ok {
+		return emptyExtend
+	}
+
+	return extend
+}
+
+func (c *Converter) getGlobalExtend() map[xtype.Signature]*builder.MethodDefinition {
+	if c.globalExtend == nil {
+		return emptyExtend
+	}
+
+	return c.globalExtend
+}
+
+func (c *Converter) RegGlobalExtend(extend map[xtype.Signature]*builder.MethodDefinition) {
+	c.globalExtend = extend
+}
+
+func (c *Converter) RegSpecificExtend(method string, extend map[xtype.Signature]*builder.MethodDefinition) {
+	if c.specificExtend == nil {
+		c.specificExtend = make(map[string]map[xtype.Signature]*builder.MethodDefinition)
+	}
+
+	c.specificExtend[method] = extend
 }
 
 // ParseDocs parses the docs for the given pattern.

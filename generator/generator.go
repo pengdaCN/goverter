@@ -10,7 +10,6 @@ import (
 	"go/types"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
-	"golang.org/x/tools/go/packages"
 	"sort"
 	"strings"
 )
@@ -20,10 +19,8 @@ type generator struct {
 	name   string
 	file   *jen.File
 	lookup map[xtype.Signature]*builder.MethodDefinition
-	// TODO deleted
-	extend map[xtype.Signature]*builder.MethodDefinition
 	// pkgCache caches the extend packages, saving load time
-	pkgCache map[string][]*packages.Package
+	//pkgCache map[string][]*packages.Package
 	// workingDir is a working directory, can be empty
 	//workingDir string
 }
@@ -195,7 +192,7 @@ func (g *generator) Build(ctx *builder.MethodContext, sourceID *xtype.JenID, sou
 		ok        bool
 	)
 
-	_sourceID, method, ok = g._lookupExtend(source, target, sourceID)
+	_sourceID, method, ok = g._lookupExtend(ctx, source, target, sourceID)
 	if !ok {
 		_source, _target, _sourceID, _targetID = OptimizeParams(ctx, source, target, sourceID, ctx.TargetID)
 		method, ok = g._lookup(_source, _target)
@@ -323,19 +320,34 @@ func (g *generator) _lookup(source, target *xtype.Type) (*builder.MethodDefiniti
 	return method, ok
 }
 
-func (g *generator) _lookupExtend(source, target *xtype.Type, sourceID *xtype.JenID) (
+func (g *generator) _lookupExtend(ctx *builder.MethodContext, source, target *xtype.Type, sourceID *xtype.JenID) (
 	nextSourceID *xtype.JenID,
 	method *builder.MethodDefinition,
 	ok bool,
 ) {
-	method, ok = g.extend[xtype.Signature{Source: source.T.String(), Target: target.T.String()}]
+	method, ok = ctx.MethodExtend[xtype.Signature{
+		Source: source.T.String(),
+		Target: target.T.String(),
+	}]
+	if !ok {
+		method, ok = ctx.GlobalExtend[xtype.Signature{
+			Source: source.T.String(),
+			Target: target.T.String(),
+		}]
+	}
 	if !ok {
 		if source.Pointer && source.PointerType != nil {
 			nextSourceID = xtype.OtherID(jen.Op("*").Add(sourceID.Code.Clone()))
-			method, ok = g.extend[xtype.Signature{
+			method, ok = ctx.GlobalExtend[xtype.Signature{
 				Source: strings.TrimLeft(source.T.String(), "*"),
 				Target: target.T.String(),
 			}]
+			if !ok {
+				method, ok = ctx.GlobalExtend[xtype.Signature{
+					Source: strings.TrimLeft(source.T.String(), "*"),
+					Target: target.T.String(),
+				}]
+			}
 		} else {
 			if !source.Pointer {
 				nextSourceID = xtype.OtherID(jen.Op("&").Add(sourceID.Code.Clone()))
@@ -343,10 +355,16 @@ func (g *generator) _lookupExtend(source, target *xtype.Type, sourceID *xtype.Je
 				nextSourceID = sourceID
 			}
 
-			method, ok = g.extend[xtype.Signature{
+			method, ok = ctx.MethodExtend[xtype.Signature{
 				Source: "*" + source.T.String(),
 				Target: target.T.String(),
 			}]
+			if !ok {
+				method, ok = ctx.GlobalExtend[xtype.Signature{
+					Source: "*" + source.T.String(),
+					Target: target.T.String(),
+				}]
+			}
 		}
 
 		return
