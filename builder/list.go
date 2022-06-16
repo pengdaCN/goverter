@@ -9,7 +9,7 @@ import (
 type List struct{}
 
 // Matches returns true, if the builder can create handle the given types.
-func (*List) Matches(_ *MethodContext, source, target *xtype.Type) bool {
+func (*List) Matches(source, target *xtype.Type, kind xtype.MethodKind) bool {
 	return source.List && target.List && !target.ListFixed
 }
 

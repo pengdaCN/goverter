@@ -11,7 +11,6 @@ import (
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 	"sort"
-	"strings"
 )
 
 type generator struct {
@@ -163,7 +162,7 @@ func (g *generator) buildMethod(ctx *builder.MethodContext, method *builder.Meth
 
 func (g *generator) buildNoLookup(ctx *builder.MethodContext, sourceID *xtype.JenID, source, target *xtype.Type) ([]jen.Code, *xtype.JenID, *builder.Error) {
 	for _, rule := range BuildSteps {
-		if rule.Matches(ctx, source, target) {
+		if rule.Matches(source, target, ctx.Signature.Kind) {
 			return rule.Build(g, ctx, sourceID, source, target)
 		}
 	}
@@ -181,8 +180,9 @@ func (g *generator) Build(ctx *builder.MethodContext, sourceID *xtype.JenID, sou
 		ok        bool
 	)
 
-	_sourceID, method, ok = g._lookupExtend(ctx, source, target, sourceID)
+	_sourceID, _targetID, method, ok = _lookupExtend(ctx, source, target, sourceID)
 	if !ok {
+		// TODO 修改逻辑
 		_source, _target, _sourceID, _targetID = OptimizeParams(ctx, source, target, sourceID, ctx.TargetID)
 		method, ok = g._lookup(_source, _target)
 	}
@@ -196,8 +196,8 @@ func (g *generator) Build(ctx *builder.MethodContext, sourceID *xtype.JenID, sou
 		}
 		params = append(params, _sourceID.Code.Clone())
 
-		switch {
-		case method.ZeroCopyStruct:
+		switch method.Kind {
+		case xtype.InSourceIn2Target:
 			params = append(params, _targetID.Code.Clone())
 		default:
 		}
@@ -213,8 +213,8 @@ func (g *generator) Build(ctx *builder.MethodContext, sourceID *xtype.JenID, sou
 				current.Dirty = true
 			}
 
-			switch {
-			case method.ZeroCopyStruct:
+			switch method.Kind {
+			case xtype.InSourceIn2Target:
 				stmt := []jen.Code{
 					jen.List(jen.Id("err")).Op(":=").Add(
 						method.Call.Clone().Call(params...),
@@ -225,7 +225,7 @@ func (g *generator) Build(ctx *builder.MethodContext, sourceID *xtype.JenID, sou
 				}
 
 				return stmt, nil, nil
-			default:
+			case xtype.InSourceOutTarget:
 				name := ctx.Name(target.ID())
 				innerName := ctx.Name("errValue")
 				stmt := []jen.Code{
@@ -241,11 +241,11 @@ func (g *generator) Build(ctx *builder.MethodContext, sourceID *xtype.JenID, sou
 
 		stmt := method.Call.Clone().Call(params...)
 
-		switch {
-		case method.ZeroCopyStruct:
-			return []jen.Code{stmt}, nil, nil
-		default:
+		switch method.Kind {
+		case xtype.InSourceOutTarget:
 			return nil, xtype.OtherID(stmt), nil
+		case xtype.InSourceIn2Target:
+			return []jen.Code{stmt}, nil, nil
 		}
 	}
 
@@ -254,30 +254,33 @@ func (g *generator) Build(ctx *builder.MethodContext, sourceID *xtype.JenID, sou
 			name string
 		)
 
-		method := &builder.MethodDefinition{
+		m := &builder.MethodDefinition{
 			Source: xtype.TypeOf(_source.T),
 			Target: xtype.TypeOf(_target.T),
 		}
 
-		if _source.Struct && _target.Struct && ctx.ZeroCopyStruct {
-			method.ZeroCopyStruct = true
+		if _source.Pointer && _target.Pointer && _source.PointerInner.Struct && _target.PointerInner.Struct {
+			m.Kind = xtype.InSourceIn2Target
 		}
-		if !method.ZeroCopyStruct {
+
+		switch m.Kind {
+		case xtype.InSourceOutTarget:
 			name = g.namer.Name(source.UnescapedID() + "To" + cases.Title(language.English).String(target.UnescapedID()))
-		} else {
+		case xtype.InSourceIn2Target:
 			name = g.namer.Name(source.UnescapedID() + "Mapping" + cases.Title(language.English).String(target.UnescapedID()))
 		}
-		method.ID = name
-		method.Name = name
-		method.Call = jen.Id(xtype.ThisVar).Dot(name)
+
+		m.ID = name
+		m.Name = name
+		m.Call = jen.Id(xtype.ThisVar).Dot(name)
 
 		if ctx.PointerChange {
 			ctx.PointerChange = false
 		}
 
-		g.lookup[xtype.Signature{Source: _source.T.String(), Target: _target.T.String()}] = method
-		g.namer.Register(method.Name)
-		if err := g.buildMethod(ctx.Enter(), method); err != nil {
+		g.lookup[xtype.Signature{Source: _source.T.String(), Target: _target.T.String(), Kind: m.Kind}] = method
+		g.namer.Register(m.Name)
+		if err := g.buildMethod(ctx.Enter(), m); err != nil {
 			return nil, nil, err
 		}
 		// try again to trigger the found method thingy above
@@ -285,7 +288,7 @@ func (g *generator) Build(ctx *builder.MethodContext, sourceID *xtype.JenID, sou
 	}
 
 	for _, rule := range BuildSteps {
-		if rule.Matches(ctx, source, target) {
+		if rule.Matches(source, target, ctx.Signature.Kind) {
 			return rule.Build(g, ctx, sourceID, source, target)
 		}
 	}
@@ -309,59 +312,148 @@ func (g *generator) _lookup(source, target *xtype.Type) (*builder.MethodDefiniti
 	return method, ok
 }
 
-func (g *generator) _lookupExtend(ctx *builder.MethodContext, source, target *xtype.Type, sourceID *xtype.JenID) (
+func _lookupExtend(ctx *builder.MethodContext, source, target *xtype.Type, sourceID *xtype.JenID) (
 	nextSourceID *xtype.JenID,
+	nextTargetID *xtype.JenID,
 	method *builder.MethodDefinition,
 	ok bool,
 ) {
-	method, ok = ctx.MethodExtend[xtype.Signature{
-		Source: source.T.String(),
-		Target: target.T.String(),
-	}]
-	if !ok {
-		method, ok = ctx.GlobalExtend[xtype.Signature{
-			Source: source.T.String(),
-			Target: target.T.String(),
-		}]
-	}
-	if !ok {
-		if source.Pointer && source.PointerType != nil {
-			nextSourceID = xtype.OtherID(jen.Op("*").Add(sourceID.Code.Clone()))
-			method, ok = ctx.GlobalExtend[xtype.Signature{
-				Source: strings.TrimLeft(source.T.String(), "*"),
-				Target: target.T.String(),
-			}]
-			if !ok {
-				method, ok = ctx.GlobalExtend[xtype.Signature{
-					Source: strings.TrimLeft(source.T.String(), "*"),
-					Target: target.T.String(),
-				}]
-			}
-		} else {
-			if !source.Pointer {
-				nextSourceID = xtype.OtherID(jen.Op("&").Add(sourceID.Code.Clone()))
-			} else {
-				nextSourceID = sourceID
-			}
+	const (
+		raw byte = iota + 1
+		ref
+		deref
+	)
 
-			method, ok = ctx.MethodExtend[xtype.Signature{
-				Source: "*" + source.T.String(),
-				Target: target.T.String(),
-			}]
-			if !ok {
-				method, ok = ctx.GlobalExtend[xtype.Signature{
-					Source: "*" + source.T.String(),
-					Target: target.T.String(),
-				}]
-			}
+	var (
+		// source 类型能取引用
+		sourceRef = !source.Pointer && !source.List && !source.Map
+		// target 类型能取引用
+		targetRef = !target.Pointer && !target.List && !target.Map
+		// source 类型能解引用
+		sourceDeref = source.Pointer
+		sourceVerb  = []byte{raw}
+		targetVerb  = []byte{raw}
+	)
+	{
+		if sourceRef {
+			sourceVerb = append(sourceVerb, ref)
+		}
+		if targetRef {
+			targetVerb = append(targetVerb, ref)
 		}
 
-		return
+		if sourceDeref {
+			sourceVerb = append(sourceVerb, deref)
+		}
+	}
+	for _, sVerb := range sourceVerb {
+		var (
+			sourceTy string
+		)
+		switch sVerb {
+		case raw:
+			sourceTy = source.T.String()
+			nextSourceID = xtype.OtherID(sourceID.Code.Clone())
+		case ref:
+			sourceTy = "*" + source.T.String()
+			nextSourceID = xtype.OtherID(jen.Op("&").Add(sourceID.Code.Clone()))
+		case deref:
+			sourceTy = source.PointerInner.T.String()
+			nextSourceID = xtype.OtherID(jen.Op("*").Add(sourceID.Code.Clone()))
+		}
+		for _, tVerb := range targetVerb {
+			var (
+				targetTy string
+			)
+			switch tVerb {
+			case raw:
+				targetTy = source.T.String()
+				nextTargetID = xtype.OtherID(ctx.TargetID.Code.Clone())
+			case ref:
+				targetTy = "*" + source.T.String()
+				nextTargetID = xtype.OtherID(jen.Op("&").Add(ctx.TargetID.Code.Clone()))
+			}
+
+			var sign = xtype.Signature{
+				Source: sourceTy,
+				Target: targetTy,
+				Kind:   xtype.InSourceOutTarget,
+			}
+			method, ok = ctx.MethodExtend[sign]
+			if ok {
+				return
+			}
+
+			var (
+				needSearchInSourceIn2Target bool
+			)
+			// 判断是否需要InSourceIn2Target类型函数查询
+			switch tVerb {
+			case raw:
+				needSearchInSourceIn2Target = target.Pointer
+			case ref:
+				needSearchInSourceIn2Target = true
+			}
+
+			if needSearchInSourceIn2Target {
+				sign.Kind = xtype.InSourceIn2Target
+				method, ok = ctx.MethodExtend[sign]
+				if ok {
+					return
+				}
+			}
+		}
 	}
 
-	nextSourceID = sourceID
-
 	return
+	//method, ok = ctx.MethodExtend[xtype.Signature{
+	//	Source: source.T.String(),
+	//	Target: target.T.String(),
+	//}]
+	//if !ok {
+	//	method, ok = ctx.GlobalExtend[xtype.Signature{
+	//		Source: source.T.String(),
+	//		Target: target.T.String(),
+	//	}]
+	//}
+	//if !ok {
+	//	if source.Pointer && source.PointerType != nil {
+	//		nextSourceID = xtype.OtherID(jen.Op("*").Add(sourceID.Code.Clone()))
+	//		method, ok = ctx.GlobalExtend[xtype.Signature{
+	//			Source: strings.TrimLeft(source.T.String(), "*"),
+	//			Target: target.T.String(),
+	//		}]
+	//		if !ok {
+	//			method, ok = ctx.GlobalExtend[xtype.Signature{
+	//				Source: strings.TrimLeft(source.T.String(), "*"),
+	//				Target: target.T.String(),
+	//			}]
+	//		}
+	//	} else {
+	//		if !source.Pointer {
+	//			nextSourceID = xtype.OtherID(jen.Op("&").Add(sourceID.Code.Clone()))
+	//		} else {
+	//			nextSourceID = sourceID
+	//		}
+	//
+	//		method, ok = ctx.MethodExtend[xtype.Signature{
+	//			Source: "*" + source.T.String(),
+	//			Target: target.T.String(),
+	//		}]
+	//		if !ok {
+	//			method, ok = ctx.GlobalExtend[xtype.Signature{
+	//				Source: "*" + source.T.String(),
+	//				Target: target.T.String(),
+	//			}]
+	//		}
+	//	}
+	//
+	//	return
+	//}
+	//
+	//nextSourceID = sourceID
+	//
+	//return
 }
 
 func OptimizeParams(ctx *builder.MethodContext, source, target *xtype.Type, sourceID, targetID *xtype.JenID) (
