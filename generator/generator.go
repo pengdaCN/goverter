@@ -101,10 +101,18 @@ func (g *generator) buildMethod(ctx *builder.MethodContext, method *builder.Meth
 	)
 
 	if method.ReturnError {
-		returns[1] = jen.Id("error")
+		switch method.Kind {
+		case xtype.InSourceOutTarget:
+			returns[1] = jen.Id("error")
+		case xtype.InSourceIn2Target:
+			returns[0] = jen.Id("error")
+		}
 	}
 
 	ctx.TargetType = target
+	if method.Kind == xtype.InSourceIn2Target {
+		ctx.TargetID = xtype.VariableID(sourceID.Clone())
+	}
 	ctx.Signature = xtype.Signature{Source: method.Source.T.String(), Target: method.Target.T.String(), Kind: method.Kind}
 
 	stmt, newID, err := g.buildNoLookup(ctx, xtype.VariableID(sourceID.Clone()), source, target)
@@ -112,7 +120,16 @@ func (g *generator) buildMethod(ctx *builder.MethodContext, method *builder.Meth
 		return err
 	}
 
-	ret := []jen.Code{newID.Code}
+	var (
+		ret []jen.Code
+	)
+
+	switch method.Kind {
+	case xtype.InSourceOutTarget:
+		ret = []jen.Code{newID.Code}
+	case xtype.InSourceIn2Target:
+	}
+
 	if method.ReturnError {
 		ret = append(ret, jen.Nil())
 	}
@@ -122,13 +139,12 @@ func (g *generator) buildMethod(ctx *builder.MethodContext, method *builder.Meth
 	var (
 		params []jen.Code
 	)
-	switch {
-	case method.ZeroCopyStruct:
-		params = append(params, jen.Id(xtype.In).Add(jen.Op("*").Add(source.TypeAsJen())), jen.Id(xtype.Out).Add(jen.Op("*").Add(target.TypeAsJen())))
-		returns[0] = jen.Op("*").Add(target.TypeAsJen())
-	default:
+	switch method.Kind {
+	case xtype.InSourceOutTarget:
 		params = append(params, jen.Id(xtype.In).Add(source.TypeAsJen()))
 		returns[0] = target.TypeAsJen()
+	case xtype.InSourceIn2Target:
+		params = append(params, jen.Id(xtype.In).Add(source.TypeAsJen()), jen.Id(xtype.Out).Add(target.TypeAsJen()))
 	}
 
 	method.Jen = jen.Func().
