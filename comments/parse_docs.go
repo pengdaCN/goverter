@@ -44,6 +44,7 @@ type Converter struct {
 type ConverterConfig struct {
 	Name          string
 	ExtendMethods []string
+	NoStrict      bool
 }
 
 // Method contains settings that can be set via comments.
@@ -54,12 +55,18 @@ type Method struct {
 	// target to source
 	IdentityMapping map[string]struct{}
 	NoStrict        bool
+	Strict          bool
 	ZeroCopy        bool
 	ExtendMethods   []string
 }
 
 func (c *Converter) BuildCtx(method string) *builder.MethodContext {
 	m, ok := c.Methods[method]
+	noStrict := c.Config.NoStrict || m.NoStrict
+	if noStrict {
+		noStrict = !m.Strict
+	}
+
 	if ok {
 		return &builder.MethodContext{
 			GlobalExtend:    c.globalExtend,
@@ -68,7 +75,7 @@ func (c *Converter) BuildCtx(method string) *builder.MethodContext {
 			MatchIgnoreCase: m.MatchIgnoreCase,
 			IgnoredFields:   m.IgnoredFields,
 			IdentityMapping: m.IdentityMapping,
-			NoStrict:        m.NoStrict,
+			NoStrict:        noStrict,
 			ZeroCopyStruct:  m.ZeroCopy,
 			ID:              method,
 		}
@@ -250,6 +257,9 @@ func parseConverterComment(comment string, config ConverterConfig) (ConverterCon
 			case "extend":
 				config.ExtendMethods = append(config.ExtendMethods, fields[1:]...)
 				continue
+			case "noStrict":
+				config.NoStrict = true
+				continue
 			}
 			return config, fmt.Errorf("unknown %s comment: %s", prefix, line)
 		}
@@ -297,6 +307,9 @@ func parseMethodComment(comment string) (Method, error) {
 				continue
 			case "noStrict":
 				m.NoStrict = true
+				continue
+			case "strict":
+				m.Strict = true
 				continue
 			case "zeroCopy":
 				m.ZeroCopy = true
