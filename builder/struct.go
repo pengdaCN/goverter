@@ -218,7 +218,7 @@ func mapField(_ Generator, ctx *MethodContext, targetField *types.Var, sourceID 
 
 	mappedName, hasOverride := ctx.Mapping[targetField.Name()]
 	if ctx.Signature.Target != target.T.String() || !hasOverride {
-		sourceMatch, err := source.StructField(targetField.Name(), ctx.MatchIgnoreCase, ctx.IgnoredFields)
+		sourceMatch, err := source.StructField(mappedName, ctx.MatchIgnoreCase, ctx.IgnoredFields)
 		if err == nil {
 			nextID := sourceID.Code.Clone().Dot(sourceMatch.Name)
 			lift = append(lift, &Path{
