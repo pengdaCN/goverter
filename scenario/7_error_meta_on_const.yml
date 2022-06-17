@@ -1,7 +1,0 @@
-input:
-    input.go: |
-        package err
-
-        // goverter:converter
-        const x = 5
-error: '/ABSOLUTE/execution/input.go:4:1: goverter:converter may only be applied to type declarations '
