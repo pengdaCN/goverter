@@ -10,7 +10,7 @@ type Pointer struct{}
 
 // Matches returns true, if the builder can create handle the given types.
 func (*Pointer) Matches(source, target *xtype.Type, kind xtype.MethodKind) bool {
-	return source.Pointer && target.Pointer
+	return source.Pointer && target.Pointer && kind == xtype.InSourceOutTarget
 }
 
 // Build creates conversion source code for the given source and target type.
@@ -18,23 +18,26 @@ func (*Pointer) Build(gen Generator, ctx *MethodContext, sourceID *xtype.JenID, 
 	ctx.PointerChange = true
 
 	var (
-		outerVar     = ctx.Name(target.ID())
-		innerVar     = ctx.Name(target.PointerInner.ID())
-		nextSourceId *xtype.JenID
-		sourceTy     *xtype.Type
+		outerVar        = ctx.Name(target.ID())
+		innerVar        = ctx.Name(target.PointerInner.ID())
+		nextSourceID    *xtype.JenID
+		nextSource      *xtype.Type
+		nextTarget      *xtype.Type
+		enabledZeroCopy = source.PointerInner.Struct && target.PointerInner.Struct
 	)
 
-	switch {
-	case ctx.ZeroCopyStruct:
-		ctx.TargetID = xtype.OtherID(jen.Id(innerVar))
-		nextSourceId = xtype.OtherID(sourceID.Code.Clone())
-		sourceTy = source
-	default:
-		nextSourceId = xtype.OtherID(jen.Op("*").Add(sourceID.Code.Clone()))
-		sourceTy = source.PointerInner
+	if enabledZeroCopy {
+		nextSourceID = xtype.OtherID(sourceID.Code.Clone())
+		nextSource = source
+		nextTarget = target
+		ctx.TargetID = xtype.OtherID(jen.Op("&").Add(jen.Id(innerVar)))
+		ctx.WantMethodKind = xtype.InSourceIn2Target
+	} else {
+		nextSourceID = xtype.OtherID(jen.Op("*").Add(sourceID.Code.Clone()))
+		nextSource = source.PointerInner
 	}
 
-	nextBlock, id, err := gen.Build(ctx, nextSourceId, sourceTy, target.PointerInner)
+	nextBlock, id, err := gen.Build(ctx, nextSourceID, nextSource, nextTarget)
 	if err != nil {
 		return nil, nil, err.Lift(&Path{
 			SourceID:   "*",
@@ -44,23 +47,19 @@ func (*Pointer) Build(gen Generator, ctx *MethodContext, sourceID *xtype.JenID, 
 		})
 	}
 
-	mdef, ok := gen.Lookup(ctx, source.PointerInner, target.PointerInner)
 	var (
 		ifBlock []jen.Code
 	)
 
-	switch {
-	case ok && mdef.ZeroCopyStruct:
+	if enabledZeroCopy {
 		ifBlock = append(ifBlock, jen.Var().Id(innerVar).Add(target.PointerInner.TypeAsJen()))
-	default:
 	}
 
 	ifBlock = append(ifBlock, nextBlock...)
 
-	switch {
-	case mdef.ZeroCopyStruct:
+	if enabledZeroCopy {
 		ifBlock = append(ifBlock, jen.Id(outerVar).Op("=").Op("&").Add(jen.Id(innerVar)))
-	default:
+	} else {
 		if id.Variable {
 			ifBlock = append(ifBlock, jen.Id(outerVar).Op("=").Op("&").Add(id.Code.Clone()))
 		} else {
@@ -83,7 +82,7 @@ type TargetPointer struct{}
 
 // Matches returns true, if the builder can create handle the given types.
 func (*TargetPointer) Matches(source, target *xtype.Type, kind xtype.MethodKind) bool {
-	return !source.Pointer && target.Pointer
+	return !source.Pointer && target.Pointer && kind == xtype.InSourceOutTarget
 }
 
 // Build creates conversion source code for the given source and target type.

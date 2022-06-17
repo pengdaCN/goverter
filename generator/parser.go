@@ -10,6 +10,8 @@ import (
 
 type ParseOption struct {
 	ConverterInterface types.Type
+	Qual               string
+	Explicit           bool
 }
 
 type ParseOpt func(opt *ParseOption)
@@ -82,8 +84,15 @@ func ParseMethod(method *types.Func, opts ...ParseOpt) (*builder.MethodDefinitio
 		}
 	}
 
+	var call *jen.Statement
+	if opt.Qual != "" {
+		call = jen.Qual(opt.Qual, method.Name())
+	} else {
+		call = jen.Id(xtype.ThisVar).Dot(method.Name())
+	}
+
 	return &builder.MethodDefinition{
-		Call:             jen.Id(xtype.ThisVar).Dot(method.Name()),
+		Call:             call,
 		ID:               method.String(),
 		Name:             method.Name(),
 		SelfAsFirstParam: selfAsFirstParameter,

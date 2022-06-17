@@ -14,42 +14,79 @@ import (
 type Struct struct{}
 
 // Matches returns true, if the builder can create handle the given types.
-func (p *Struct) Matches(source, target *xtype.Type, kind xtype.MethodKind) bool {
+func (p *Struct) Matches(source, target *xtype.Type, _ xtype.MethodKind) bool {
 	return source.Struct && target.Struct
 }
 
 // Build creates conversion source code for the given source and target type.
 func (*Struct) Build(gen Generator, ctx *MethodContext, sourceID *xtype.JenID, source, target *xtype.Type) ([]jen.Code, *xtype.JenID, *Error) {
 	var (
-		name string
-		stmt []jen.Code
+		name = ctx.Name(target.ID())
+		stmt = []jen.Code{
+			jen.Var().Id(name).Add(target.TypeAsJen()),
+		}
 	)
 
-	mdef, ok := gen.Lookup(ctx, source, target)
-	switch {
-	case ok && mdef.ZeroCopyStruct:
-		name = xtype.Out
-		stmt = append(stmt, jen.If(
-			jen.Id(xtype.In).Op("==").Nil().
-				Op("||").
-				Id(xtype.Out).Op("==").Nil(),
-		).
-			Block(
-				jen.Return(jen.Nil()),
-			))
-	default:
-		name = ctx.Name(target.ID())
-		stmt = append(stmt, jen.Var().Id(name).Add(target.TypeAsJen()))
+	ctx.TargetID = xtype.OtherID(jen.Op("&").Add(jen.Id(name)))
+	ctx.WantMethodKind = xtype.InSourceIn2Target
+
+	alloc, _, err := gen.Build(
+		ctx,
+		xtype.OtherID(jen.Op("&").Add(sourceID.Code.Clone())),
+		xtype.WrapWithPtr(source),
+		xtype.WrapWithPtr(target),
+	)
+	if err != nil {
+		return nil, nil, err
 	}
 
-	for i := 0; i < target.StructType.NumFields(); i++ {
-		targetField := target.StructType.Field(i)
+	stmt = append(stmt, alloc...)
+	stmt = append(stmt, jen.Return(jen.Id(name)))
+
+	return stmt, xtype.VariableID(jen.Id(name)), nil
+}
+
+type ZeroCopyStruct struct{}
+
+func (z *ZeroCopyStruct) Matches(source, target *xtype.Type, kind xtype.MethodKind) bool {
+	return source.Pointer && target.Pointer && source.PointerInner.Struct && target.PointerInner.Struct && kind == xtype.InSourceIn2Target
+}
+
+func (z *ZeroCopyStruct) Build(gen Generator, ctx *MethodContext, sourceID *xtype.JenID, source, target *xtype.Type) ([]jen.Code, *xtype.JenID, *Error) {
+	var (
+		name = xtype.Out
+		stmt = []jen.Code{
+			jen.If(
+				jen.Id(xtype.In).Op("==").Nil().
+					Op("||").
+					Id(xtype.Out).Op("==").Nil(),
+			).
+				Block(
+					jen.Return(),
+				),
+		}
+
+		innerSource = source.PointerInner
+		innerTarget = target.PointerInner
+	)
+
+	for i := 0; i < innerTarget.StructType.NumFields(); i++ {
+		targetField := innerTarget.StructType.Field(i)
+		targetFieldType := xtype.TypeOf(targetField.Type())
+		targetFieldRef := jen.Id(name).Dot(targetField.Name())
+		nextTarget := targetFieldType
+		nextSourceID := sourceID
+		nextSource := source
+		var sourceIsPtr bool
+
 		if _, ignore := ctx.IgnoredFields[targetField.Name()]; ignore {
 			continue
 		}
 		if !targetField.Exported() {
 			if ctx.NoStrict {
-				log.Printf("(%s.%s) warn: Cannot set value for unexported field: %s\n", gen.Name(), ctx.ID, strings.Join([]string{target.T.String(), targetField.Name()}, "."))
+				if !ctx.IgnoreUnexported {
+					log.Printf("(%s.%s) warn: Cannot set value for unexported field: %s\n", gen.Name(), ctx.ID, strings.Join([]string{target.T.String(), targetField.Name()}, "."))
+				}
 				continue
 			}
 
@@ -62,96 +99,86 @@ func (*Struct) Build(gen Generator, ctx *MethodContext, sourceID *xtype.JenID, s
 			})
 		}
 
-		// TODO 重构IdentityMapping与下列的赋值语句
-		targetFieldType := xtype.TypeOf(targetField.Type())
-		if _, ok := ctx.IdentityMapping[targetField.Name()]; ok {
-			var nextSource = *source
-			switch {
-			case ctx.ZeroCopyStruct:
-				ctx.TargetID = xtype.OtherID(jen.Id(name).Dot(targetField.Name()))
-				if source.Struct {
-					// 为兼容性处理
-					nextSource.Struct = false
-					nextSource.Pointer = true
-					nextSource.PointerInner = source
-				}
-			}
+		// 对于targetField是匿名嵌入类型，自动进行IdentityMapping操作
+		if _, ok := ctx.IdentityMapping[targetField.Name()]; ok || targetField.Embedded() {
+			goto assign
+		}
 
-			fieldStmt, fieldID, err := gen.Build(ctx, sourceID, &nextSource, targetFieldType)
+		{
+			var (
+				mapStmt []jen.Code
+				//lift    []*Path
+				nextID *jen.Statement
+				err    *Error
+			)
+			nextID, nextSource, mapStmt, _, err = mapField(gen, ctx, targetField, sourceID, innerSource, innerTarget)
 			if err != nil {
-				return nil, nil, err.Lift(&Path{
-					Prefix:     ".",
-					SourceID:   "<mapIdentity>",
-					SourceType: source.T.String(),
-					TargetID:   targetField.Name(),
-					TargetType: targetField.Type().String(),
-				})
-			}
-			mdef, ok := gen.Lookup(ctx, source, targetFieldType)
-			switch {
-			case ok && mdef.ZeroCopyStruct:
-				if targetFieldType.Pointer {
-					_filedStmt := make([]jen.Code, len(fieldStmt)+1)
-					_filedStmt[0] = jen.Id(name).Dot(targetField.Name()).Op("=").Add(jen.New(targetFieldType.PointerInner.TypeAsJen()))
-					copy(_filedStmt[1:], fieldStmt)
-
-					fieldStmt = _filedStmt
+				if ctx.NoStrict {
+					log.Printf("(%s.%s)warn: Cannot match the target field with the source entry %s\n", gen.Name(), ctx.ID, strings.Join([]string{target.T.String(), targetField.Name()}, "."))
+					continue
 				}
-			}
 
-			stmt = append(stmt, fieldStmt...)
-
-			switch {
-			case ok && mdef.ZeroCopyStruct:
-			default:
-				stmt = append(stmt, jen.Id(name).Dot(targetField.Name()).Op("=").Add(fieldID.Code))
+				return nil, nil, err
 			}
-			continue
+			nextSourceID = xtype.VariableID(nextID)
+			stmt = append(stmt, mapStmt...)
 		}
 
-		nextID, nextSource, mapStmt, lift, err := mapField(gen, ctx, targetField, sourceID, source, target)
-		if err != nil {
-			if ctx.NoStrict {
-				log.Printf("(%s.%s)warn: Cannot match the target field with the source entry %s\n", gen.Name(), ctx.ID, strings.Join([]string{target.T.String(), targetField.Name()}, "."))
-				continue
-			}
-
-			return nil, nil, err
-		}
-		stmt = append(stmt, mapStmt...)
-
-		switch {
-		case ctx.ZeroCopyStruct:
+	assign:
+		if targetFieldType.Pointer {
+			stmt = append(stmt, targetFieldRef.Clone().Op("=").Add(jen.New(targetFieldType.PointerInner.TypeAsJen())))
 			ctx.TargetID = xtype.OtherID(jen.Id(name).Dot(targetField.Name()))
-		}
-
-		fieldStmt, fieldID, err := gen.Build(ctx, xtype.VariableID(nextID), nextSource, targetFieldType)
-		if err != nil {
-			return nil, nil, err.Lift(lift...)
-		}
-
-		mdef, ok := gen.Lookup(ctx, nextSource, targetFieldType)
-		switch {
-		case ok && mdef.ZeroCopyStruct:
-			if targetFieldType.Pointer {
-				_filedStmt := make([]jen.Code, len(fieldStmt)+1)
-				_filedStmt[0] = jen.Id(name).Dot(targetField.Name()).Op("=").Add(jen.New(targetFieldType.PointerInner.TypeAsJen()))
-				copy(_filedStmt[1:], fieldStmt)
-
-				fieldStmt = _filedStmt
+		} else {
+			if targetFieldType.Struct {
+				nextTarget = xtype.WrapWithPtr(targetFieldType)
+				ctx.TargetID = xtype.OtherID(jen.Op("&").Add(targetFieldRef.Clone()))
+			} else {
+				ctx.TargetID = xtype.OtherID(targetFieldRef)
 			}
 		}
 
-		stmt = append(stmt, fieldStmt...)
+		if nextSource.Pointer {
+			sourceIsPtr = true
+		} else {
+			if nextSource.Struct {
+				nextSource = xtype.WrapWithPtr(nextSource)
+				nextSourceID = xtype.OtherID(jen.Op("&").Add(nextSourceID.Code.Clone()))
+			}
+		}
 
-		switch {
-		case ok && mdef.ZeroCopyStruct:
-		default:
-			stmt = append(stmt, jen.Id(name).Dot(targetField.Name()).Op("=").Add(fieldID.Code))
+		fieldStmt, fieldID, err := gen.Build(ctx, nextSourceID, nextSource, nextTarget)
+		if err != nil {
+			return nil, nil, err.Lift(&Path{
+				Prefix:     ".",
+				SourceID:   "???",
+				SourceType: nextSource.T.String(),
+				TargetID:   targetField.Name(),
+				TargetType: targetField.Type().String(),
+			})
+		}
+
+		if sourceIsPtr {
+			if fieldID != nil {
+				fieldStmt = append(fieldStmt, targetFieldRef.Clone().Op("=").Add(fieldID.Code))
+			}
+
+			stmt = append(stmt, jen.
+				If(
+					nextSourceID.Code.Clone().Op("!=").Nil(),
+				).
+				Block(
+					fieldStmt...,
+				),
+			)
+		} else {
+			stmt = append(stmt, fieldStmt...)
+			if fieldID != nil {
+				stmt = append(stmt, targetFieldRef.Clone().Op("=").Add(fieldID.Code))
+			}
 		}
 	}
 
-	return stmt, xtype.VariableID(jen.Id(name)), nil
+	return stmt, nil, nil
 }
 
 // TODO 对错误进行处理

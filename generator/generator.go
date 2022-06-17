@@ -86,10 +86,12 @@ func (g *generator) appendToFile() {
 }
 
 func (g *generator) buildMethod(ctx *builder.MethodContext, method *builder.MethodDefinition) *builder.Error {
-	sourceID := jen.Id(xtype.In)
-	source := method.Source
-
-	target := method.Target
+	var (
+		sourceID = jen.Id(xtype.In)
+		targetID = jen.Id(xtype.Out)
+		source   = method.Source
+		target   = method.Target
+	)
 
 	var (
 		returns = make([]jen.Code, 2)
@@ -100,13 +102,13 @@ func (g *generator) buildMethod(ctx *builder.MethodContext, method *builder.Meth
 		case xtype.InSourceOutTarget:
 			returns[1] = jen.Id("error")
 		case xtype.InSourceIn2Target:
-			returns[0] = jen.Id("error")
+			returns[0] = jen.Id("err").Add(jen.Id("error"))
 		}
 	}
 
 	ctx.TargetType = target
 	if method.Kind == xtype.InSourceIn2Target {
-		ctx.TargetID = xtype.VariableID(sourceID.Clone())
+		ctx.TargetID = xtype.VariableID(targetID.Clone())
 	}
 	ctx.Signature = xtype.Signature{Source: method.Source.T.String(), Target: method.Target.T.String(), Kind: method.Kind}
 	ctx.WantMethodKind = ctx.Signature.Kind
@@ -244,7 +246,7 @@ func (g *generator) Build(ctx *builder.MethodContext, sourceID *xtype.JenID, sou
 		}
 	}
 
-	if (source.Named && !source.Basic) || (target.Named && !target.Basic) {
+	if (source.Named && !source.Basic) || (target.Named && !target.Basic) || (source.Pointer && target.Pointer && source.PointerInner.Struct && target.PointerInner.Struct) {
 		var (
 			name string
 		)
@@ -269,7 +271,8 @@ func (g *generator) Build(ctx *builder.MethodContext, sourceID *xtype.JenID, sou
 		m.Name = name
 		m.Call = jen.Id(xtype.ThisVar).Dot(name)
 
-		g.lookup[xtype.Signature{Source: source.T.String(), Target: target.T.String(), Kind: m.Kind}] = method
+		g.lookup[xtype.Signature{Source: source.T.String(), Target: target.T.String(), Kind: m.Kind}] = m
+
 		g.namer.Register(m.Name)
 		if err := g.buildMethod(ctx.Enter(), m); err != nil {
 			return nil, nil, err

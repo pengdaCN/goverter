@@ -33,12 +33,20 @@ type MethodContext struct {
 	MethodExtend    map[xtype.Signature]*MethodDefinition
 	Signature       xtype.Signature
 	TargetType      *xtype.Type
-	PointerChange   bool
-	MatchIgnoreCase bool
-	NoStrict        bool
-	ZeroCopyStruct  bool
-	TargetID        *xtype.JenID
-	ID              string
+	WantMethodKind  xtype.MethodKind
+
+	// TODO DELETE
+	PointerChange bool
+
+	MatchIgnoreCase  bool
+	NoStrict         bool
+	IgnoreUnexported bool
+
+	// TODO DELETE
+	ZeroCopyStruct bool
+
+	TargetID *xtype.JenID
+	ID       string
 }
 
 func (m *MethodContext) Enter() *MethodContext {

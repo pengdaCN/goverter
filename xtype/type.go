@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"go/types"
 	"strings"
+	"unsafe"
 
 	"github.com/dave/jennifer/jen"
 )
@@ -168,6 +169,23 @@ func TypeOf(t types.Type) *Type {
 		panic("unknown types.Type " + t.String())
 	}
 	return rt
+}
+
+func WrapWithPtr(ty *Type) *Type {
+	rt := &Type{}
+	rt.T = wrapInnerWithPtr(ty.T)
+	rt.Pointer = true
+	rt.PointerInner = ty
+
+	return rt
+}
+
+func wrapInnerWithPtr(ty types.Type) types.Type {
+	var ptr types.Pointer
+	elem := (*types.Type)(unsafe.Add(unsafe.Pointer(&ptr), ptrElemOffset))
+	*elem = ty
+
+	return &ptr
 }
 
 // ID returns a deteministically generated id that may be used as variable.

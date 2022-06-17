@@ -211,7 +211,7 @@ func (g *parseExtendContext) parseExtendFunc(fn *types.Func, opts *ParseExtendOp
 		return fmt.Errorf("method %s is unexported", fn.Name())
 	}
 
-	m, err := ParseMethod(fn, UseConverterInter(opts.ConverterInterface))
+	m, err := ParseMethod(fn, UseConverterInter(opts.ConverterInterface), UseExplicit(true), UseQual(fn.Pkg().Path()))
 	if err != nil {
 		return err
 	}
