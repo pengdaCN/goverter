@@ -87,18 +87,22 @@ func (*TargetPointer) Matches(source, target *xtype.Type, kind xtype.MethodKind)
 
 // Build creates conversion source code for the given source and target type.
 func (*TargetPointer) Build(gen Generator, ctx *MethodContext, sourceID *xtype.JenID, source, target *xtype.Type) ([]jen.Code, *xtype.JenID, *Error) {
-	ctx.PointerChange = true
-
 	var (
-		innerVar = ctx.Name(target.PointerInner.ID())
+		innerVar        = ctx.Name(target.PointerInner.ID())
+		nextSource      = source
+		nextTarget      = target
+		nextSourceID    = sourceID
+		enabledZeroCopy = source.PointerInner.Struct && target.PointerInner.Struct
 	)
-	switch {
-	case ctx.ZeroCopyStruct:
-		ctx.TargetID = xtype.OtherID(jen.Id(innerVar))
-	default:
+
+	ctx.TargetID = xtype.OtherID(jen.Id(innerVar))
+	if enabledZeroCopy {
+		nextSource = xtype.WrapWithPtr(source)
+		nextSourceID = xtype.OtherID(jen.Op("&").Add(sourceID.Code.Clone()))
+		ctx.WantMethodKind = xtype.InSourceIn2Target
 	}
 
-	stmt, id, err := gen.Build(ctx, sourceID, source, target.PointerInner)
+	stmt, id, err := gen.Build(ctx, nextSourceID, nextSource, nextTarget)
 	if err != nil {
 		return nil, nil, err.Lift(&Path{
 			SourceID:   "*",
@@ -108,15 +112,13 @@ func (*TargetPointer) Build(gen Generator, ctx *MethodContext, sourceID *xtype.J
 		})
 	}
 
-	mdef, ok := gen.Lookup(ctx, source, target.PointerInner)
-	switch {
-	case ok && mdef.ZeroCopyStruct:
+	if enabledZeroCopy {
 		_stmt := make([]jen.Code, len(stmt)+1)
 		_stmt[0] = jen.Var().Id(innerVar).Add(target.PointerInner.TypeAsJen())
 		copy(_stmt[1:], stmt)
 
 		stmt = _stmt
-	default:
+	} else {
 		if id.Variable {
 			return stmt, xtype.OtherID(jen.Op("&").Add(id.Code)), nil
 		}

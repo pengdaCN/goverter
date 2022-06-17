@@ -359,6 +359,7 @@ func _lookupExtend(ctx *builder.MethodContext, source, target *xtype.Type, sourc
 			sourceTy = source.PointerInner.T.String()
 			nextSourceID = xtype.OtherID(jen.Op("*").Add(sourceID.Code.Clone()))
 		}
+
 		for _, tVerb := range targetVerb {
 			var (
 				targetTy string
@@ -384,27 +385,33 @@ func _lookupExtend(ctx *builder.MethodContext, source, target *xtype.Type, sourc
 				Target: targetTy,
 				Kind:   xtype.InSourceOutTarget,
 			}
-			method, ok = ctx.MethodExtend[sign]
-			if ok {
-				return
-			}
 
-			var (
-				needSearchInSourceIn2Target bool
-			)
-			// 判断是否需要InSourceIn2Target类型函数查询
-			switch tVerb {
-			case raw:
-				needSearchInSourceIn2Target = target.Pointer
-			case ref:
-				needSearchInSourceIn2Target = true
-			}
-
-			if needSearchInSourceIn2Target {
-				sign.Kind = xtype.InSourceIn2Target
-				method, ok = ctx.MethodExtend[sign]
+			for _, extends := range []map[xtype.Signature]*builder.MethodDefinition{
+				ctx.MethodExtend,
+				ctx.GlobalExtend,
+			} {
+				method, ok = extends[sign]
 				if ok {
 					return
+				}
+
+				var (
+					needSearchInSourceIn2Target bool
+				)
+				// 判断是否需要InSourceIn2Target类型函数查询
+				switch tVerb {
+				case raw:
+					needSearchInSourceIn2Target = target.Pointer
+				case ref:
+					needSearchInSourceIn2Target = true
+				}
+
+				if needSearchInSourceIn2Target {
+					sign.Kind = xtype.InSourceIn2Target
+					method, ok = extends[sign]
+					if ok {
+						return
+					}
 				}
 			}
 		}

@@ -41,9 +41,8 @@ func (*Struct) Build(gen Generator, ctx *MethodContext, sourceID *xtype.JenID, s
 	}
 
 	stmt = append(stmt, alloc...)
-	stmt = append(stmt, jen.Return(jen.Id(name)))
 
-	return stmt, xtype.VariableID(jen.Id(name)), nil
+	return stmt, xtype.OtherID(jen.Id(name)), nil
 }
 
 type ZeroCopyStruct struct{}
