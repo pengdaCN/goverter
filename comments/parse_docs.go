@@ -42,9 +42,10 @@ type Converter struct {
 
 // ConverterConfig contains settings that can be set via comments.
 type ConverterConfig struct {
-	Name          string
-	ExtendMethods []string
-	NoStrict      bool
+	Name             string
+	ExtendMethods    []string
+	NoStrict         bool
+	IgnoreUnexported bool
 }
 
 // Method contains settings that can be set via comments.
@@ -53,10 +54,12 @@ type Method struct {
 	NameMapping     map[string]string
 	MatchIgnoreCase bool
 	// target to source
-	IdentityMapping map[string]struct{}
-	NoStrict        bool
-	Strict          bool
-	ExtendMethods   []string
+	IdentityMapping       map[string]struct{}
+	NoStrict              bool
+	Strict                bool
+	IgnoreUnexported      bool
+	EnabledUnexportedWarn bool
+	ExtendMethods         []string
 }
 
 func (c *Converter) BuildCtx(method string) *builder.MethodContext {
@@ -66,16 +69,22 @@ func (c *Converter) BuildCtx(method string) *builder.MethodContext {
 		noStrict = !m.Strict
 	}
 
+	ignoreUnexported := c.Config.IgnoreUnexported || m.IgnoreUnexported
+	if ignoreUnexported {
+		ignoreUnexported = !m.EnabledUnexportedWarn
+	}
+
 	if ok {
 		return &builder.MethodContext{
-			GlobalExtend:    c.globalExtend,
-			MethodExtend:    c.getSpecificExtend(method),
-			Mapping:         m.NameMapping,
-			MatchIgnoreCase: m.MatchIgnoreCase,
-			IgnoredFields:   m.IgnoredFields,
-			IdentityMapping: m.IdentityMapping,
-			NoStrict:        noStrict,
-			ID:              method,
+			GlobalExtend:     c.globalExtend,
+			MethodExtend:     c.getSpecificExtend(method),
+			Mapping:          m.NameMapping,
+			MatchIgnoreCase:  m.MatchIgnoreCase,
+			IgnoredFields:    m.IgnoredFields,
+			IdentityMapping:  m.IdentityMapping,
+			NoStrict:         noStrict,
+			IgnoreUnexported: ignoreUnexported,
+			ID:               method,
 		}
 
 	} else {
@@ -258,6 +267,8 @@ func parseConverterComment(comment string, config ConverterConfig) (ConverterCon
 			case "noStrict":
 				config.NoStrict = true
 				continue
+			case "ignoreUnexported":
+				config.IgnoreUnexported = true
 			}
 			return config, fmt.Errorf("unknown %s comment: %s", prefix, line)
 		}
@@ -312,6 +323,10 @@ func parseMethodComment(comment string) (Method, error) {
 			case "extend":
 				m.ExtendMethods = append(m.ExtendMethods, fields[1:]...)
 				continue
+			case "ignoreUnexported":
+				m.IgnoreUnexported = true
+			case "unexported":
+				m.EnabledUnexportedWarn = true
 			}
 			return m, fmt.Errorf("unknown %s comment: %s", prefix, line)
 		}
