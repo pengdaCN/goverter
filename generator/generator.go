@@ -109,6 +109,7 @@ func (g *generator) buildMethod(ctx *builder.MethodContext, method *builder.Meth
 		ctx.TargetID = xtype.VariableID(sourceID.Clone())
 	}
 	ctx.Signature = xtype.Signature{Source: method.Source.T.String(), Target: method.Target.T.String(), Kind: method.Kind}
+	ctx.WantMethodKind = ctx.Signature.Kind
 
 	stmt, newID, err := g.buildNoLookup(ctx, xtype.VariableID(sourceID.Clone()), source, target)
 	if err != nil {
@@ -158,7 +159,7 @@ func (g *generator) buildMethod(ctx *builder.MethodContext, method *builder.Meth
 
 func (g *generator) buildNoLookup(ctx *builder.MethodContext, sourceID *xtype.JenID, source, target *xtype.Type) ([]jen.Code, *xtype.JenID, *builder.Error) {
 	for _, rule := range BuildSteps {
-		if rule.Matches(source, target, ctx.Signature.Kind) {
+		if rule.Matches(source, target, ctx.WantMethodKind) {
 			return rule.Build(g, ctx, sourceID, source, target)
 		}
 	}
@@ -178,7 +179,7 @@ func (g *generator) Build(ctx *builder.MethodContext, sourceID *xtype.JenID, sou
 	if !ok {
 		_sourceID = sourceID
 		_targetID = ctx.TargetID
-		method, ok = g._lookup(source, target)
+		method, ok = g._lookup(source, target, ctx.WantMethodKind)
 	}
 
 	if ok {
@@ -268,10 +269,6 @@ func (g *generator) Build(ctx *builder.MethodContext, sourceID *xtype.JenID, sou
 		m.Name = name
 		m.Call = jen.Id(xtype.ThisVar).Dot(name)
 
-		if ctx.PointerChange {
-			ctx.PointerChange = false
-		}
-
 		g.lookup[xtype.Signature{Source: source.T.String(), Target: target.T.String(), Kind: m.Kind}] = method
 		g.namer.Register(m.Name)
 		if err := g.buildMethod(ctx.Enter(), m); err != nil {
@@ -282,7 +279,7 @@ func (g *generator) Build(ctx *builder.MethodContext, sourceID *xtype.JenID, sou
 	}
 
 	for _, rule := range BuildSteps {
-		if rule.Matches(source, target, ctx.Signature.Kind) {
+		if rule.Matches(source, target, ctx.WantMethodKind) {
 			return rule.Build(g, ctx, sourceID, source, target)
 		}
 	}
@@ -299,20 +296,14 @@ func (g *generator) Lookup(ctx *builder.MethodContext, source, target *xtype.Typ
 	return nil, false
 }
 
-func (g *generator) _lookup(source, target *xtype.Type) (*builder.MethodDefinition, bool) {
-	// 优先使用InSourceIn2Target类型函数
+func (g *generator) _lookup(source, target *xtype.Type, kind xtype.MethodKind) (*builder.MethodDefinition, bool) {
 	var sign = xtype.Signature{
 		Source: source.T.String(),
 		Target: target.T.String(),
-		Kind:   xtype.InSourceIn2Target,
+		Kind:   kind,
 	}
 
 	method, ok := g.lookup[sign]
-	if !ok {
-		sign.Kind = xtype.InSourceOutTarget
-		method, ok = g.lookup[sign]
-	}
-
 	return method, ok
 }
 
@@ -371,10 +362,17 @@ func _lookupExtend(ctx *builder.MethodContext, source, target *xtype.Type, sourc
 			)
 			switch tVerb {
 			case raw:
-				targetTy = source.T.String()
-				nextTargetID = xtype.OtherID(ctx.TargetID.Code.Clone())
+				targetTy = target.T.String()
+
+				if ctx.TargetID != nil {
+					nextTargetID = xtype.OtherID(ctx.TargetID.Code.Clone())
+				}
 			case ref:
-				targetTy = "*" + source.T.String()
+				if ctx.TargetID == nil {
+					continue
+				}
+
+				targetTy = "*" + target.T.String()
 				nextTargetID = xtype.OtherID(jen.Op("&").Add(ctx.TargetID.Code.Clone()))
 			}
 
