@@ -18,35 +18,25 @@ type Builder interface {
 // If no one Builder#Matches then, an error is returned.
 type Generator interface {
 	Build(ctx *MethodContext, sourceID *xtype.JenID, source, target *xtype.Type) ([]jen.Code, *xtype.JenID, *Error)
-	// Lookup TODO delete
-	Lookup(ctx *MethodContext, source, target *xtype.Type) (*MethodDefinition, bool)
 	Name() string
 }
 
 // MethodContext exposes information for the current method.
 type MethodContext struct {
 	*namer.Namer
-	Mapping         map[string]string
-	IgnoredFields   map[string]struct{}
-	IdentityMapping map[string]struct{}
-	GlobalExtend    map[xtype.Signature]*MethodDefinition
-	MethodExtend    map[xtype.Signature]*MethodDefinition
-	Signature       xtype.Signature
-	TargetType      *xtype.Type
-	WantMethodKind  xtype.MethodKind
-
-	// TODO DELETE
-	PointerChange bool
-
+	Mapping          map[string]string
+	IgnoredFields    map[string]struct{}
+	IdentityMapping  map[string]struct{}
+	GlobalExtend     map[xtype.Signature]*MethodDefinition
+	MethodExtend     map[xtype.Signature]*MethodDefinition
+	Signature        xtype.Signature
+	TargetType       *xtype.Type
+	WantMethodKind   xtype.MethodKind
 	MatchIgnoreCase  bool
 	NoStrict         bool
 	IgnoreUnexported bool
-
-	// TODO DELETE
-	ZeroCopyStruct bool
-
-	TargetID *xtype.JenID
-	ID       string
+	TargetID         *xtype.JenID
+	ID               string
 }
 
 func (m *MethodContext) Enter() *MethodContext {
@@ -58,9 +48,7 @@ func (m *MethodContext) Enter() *MethodContext {
 		GlobalExtend:    m.GlobalExtend,
 		MethodExtend:    m.MethodExtend,
 		MatchIgnoreCase: m.MatchIgnoreCase,
-		PointerChange:   m.PointerChange,
 		NoStrict:        m.NoStrict,
-		ZeroCopyStruct:  m.ZeroCopyStruct,
 		ID:              m.ID,
 	}
 }

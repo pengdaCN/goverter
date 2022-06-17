@@ -24,6 +24,7 @@ var BuildSteps = []builder.Builder{
 	&builder.ZeroCopyStruct{},
 	&builder.BasicTargetPointerRule{},
 	&builder.Struct{},
+	&builder.TargetStruct{},
 	&builder.Pointer{},
 	&builder.TargetPointer{},
 	&builder.Basic{},

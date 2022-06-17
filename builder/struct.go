@@ -42,7 +42,7 @@ func (*Struct) Build(gen Generator, ctx *MethodContext, sourceID *xtype.JenID, s
 
 	stmt = append(stmt, alloc...)
 
-	return stmt, xtype.OtherID(jen.Id(name)), nil
+	return stmt, xtype.VariableID(jen.Id(name)), nil
 }
 
 type ZeroCopyStruct struct{}
@@ -178,6 +178,38 @@ func (z *ZeroCopyStruct) Build(gen Generator, ctx *MethodContext, sourceID *xtyp
 	}
 
 	return stmt, nil, nil
+}
+
+type TargetStruct struct{}
+
+func (t *TargetStruct) Matches(source, target *xtype.Type, kind xtype.MethodKind) bool {
+	return source.Pointer && source.PointerInner.Struct && target.Struct && kind == xtype.InSourceOutTarget
+}
+
+func (t *TargetStruct) Build(gen Generator, ctx *MethodContext, sourceID *xtype.JenID, source, target *xtype.Type) ([]jen.Code, *xtype.JenID, *Error) {
+	var (
+		name = ctx.Name(target.ID())
+		stmt = []jen.Code{
+			jen.Var().Id(name).Add(target.TypeAsJen()),
+		}
+	)
+
+	ctx.TargetID = xtype.OtherID(jen.Op("&").Add(jen.Id(name)))
+	ctx.WantMethodKind = xtype.InSourceIn2Target
+
+	alloc, _, err := gen.Build(
+		ctx,
+		sourceID,
+		source,
+		xtype.WrapWithPtr(target),
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	stmt = append(stmt, alloc...)
+
+	return stmt, xtype.VariableID(jen.Id(name)), nil
 }
 
 // TODO 对错误进行处理

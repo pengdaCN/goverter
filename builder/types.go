@@ -12,9 +12,7 @@ type MethodDefinition struct {
 	Call     *jen.Statement
 	Source   *xtype.Type
 	Target   *xtype.Type
-	// TODO delete
-	ZeroCopyStruct bool
-	Kind           xtype.MethodKind
+	Kind     xtype.MethodKind
 
 	Jen jen.Code
 

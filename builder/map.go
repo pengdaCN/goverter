@@ -10,7 +10,7 @@ type Map struct{}
 
 // Matches returns true, if the builder can create handle the given types.
 func (*Map) Matches(source, target *xtype.Type, kind xtype.MethodKind) bool {
-	return source.Map && target.Map
+	return source.Map && target.Map && kind == xtype.InSourceOutTarget
 }
 
 // Build creates conversion source code for the given source and target type.

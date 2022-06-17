@@ -294,11 +294,6 @@ func (g *generator) Name() string {
 	return g.name
 }
 
-// Lookup TODO delete
-func (g *generator) Lookup(ctx *builder.MethodContext, source, target *xtype.Type) (*builder.MethodDefinition, bool) {
-	return nil, false
-}
-
 func (g *generator) _lookup(source, target *xtype.Type, kind xtype.MethodKind) (*builder.MethodDefinition, bool) {
 	var sign = xtype.Signature{
 		Source: source.T.String(),

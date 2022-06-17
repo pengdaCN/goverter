@@ -56,7 +56,6 @@ type Method struct {
 	IdentityMapping map[string]struct{}
 	NoStrict        bool
 	Strict          bool
-	ZeroCopy        bool
 	ExtendMethods   []string
 }
 
@@ -76,7 +75,6 @@ func (c *Converter) BuildCtx(method string) *builder.MethodContext {
 			IgnoredFields:   m.IgnoredFields,
 			IdentityMapping: m.IdentityMapping,
 			NoStrict:        noStrict,
-			ZeroCopyStruct:  m.ZeroCopy,
 			ID:              method,
 		}
 
@@ -310,9 +308,6 @@ func parseMethodComment(comment string) (Method, error) {
 				continue
 			case "strict":
 				m.Strict = true
-				continue
-			case "zeroCopy":
-				m.ZeroCopy = true
 				continue
 			case "extend":
 				m.ExtendMethods = append(m.ExtendMethods, fields[1:]...)
