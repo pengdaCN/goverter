@@ -110,7 +110,12 @@ func (z *ZeroCopyStruct) Build(gen Generator, ctx *MethodContext, sourceID *xtyp
 				nextID *jen.Statement
 				err    *Error
 			)
-			nextID, nextSource, mapStmt, _, err = mapField(gen, ctx, targetField, sourceID, innerSource, innerTarget)
+
+			findCtx := ctx.Enter()
+			findCtx.Signature.Source = innerSource.T.String()
+			findCtx.Signature.Target = innerTarget.T.String()
+
+			nextID, nextSource, mapStmt, _, err = mapField(gen, findCtx, targetField, sourceID, innerSource, innerTarget)
 			if err != nil {
 				if ctx.NoStrict {
 					log.Printf("(%s.%s)warn: Cannot match the target field with the source entry %s\n", gen.Name(), ctx.ID, strings.Join([]string{target.T.String(), targetField.Name()}, "."))
@@ -218,7 +223,7 @@ func mapField(_ Generator, ctx *MethodContext, targetField *types.Var, sourceID 
 
 	mappedName, hasOverride := ctx.Mapping[targetField.Name()]
 	if ctx.Signature.Target != target.T.String() || !hasOverride {
-		sourceMatch, err := source.StructField(mappedName, ctx.MatchIgnoreCase, ctx.IgnoredFields)
+		sourceMatch, err := source.StructField(targetField.Name(), ctx.MatchIgnoreCase, ctx.IgnoredFields)
 		if err == nil {
 			nextID := sourceID.Code.Clone().Dot(sourceMatch.Name)
 			lift = append(lift, &Path{

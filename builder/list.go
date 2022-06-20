@@ -18,18 +18,23 @@ func (*List) Build(gen Generator, ctx *MethodContext, sourceID *xtype.JenID, sou
 	var (
 		targetSlice                             = ctx.Name(target.ID())
 		index                                   = ctx.Index()
-		nextSource, nextTarget, enabledZeroCopy = optimizeZeroCopy(source, target)
+		nextSource, nextTarget, enabledZeroCopy = optimizeZeroCopy(source.ListInner, target.ListInner)
 		nextSourceID                            = xtype.VariableID(sourceID.Code.Clone().Index(jen.Id(index)))
 	)
 	ctx.TargetID = xtype.OtherID(jen.Id(targetSlice).Index(jen.Id(index)))
 	if enabledZeroCopy {
-		if source.Struct {
+		ctx.WantMethodKind = xtype.InSourceIn2Target
+
+		if nextSource.Struct {
 			nextSourceID = xtype.OtherID(jen.Op("&").Add(nextSourceID.Code.Clone()))
 		}
 
-		if target.Struct {
+		if nextTarget.Struct {
 			ctx.TargetID = xtype.OtherID(jen.Op("&").Add(ctx.TargetID.Code.Clone()))
 		}
+	} else {
+		nextSource = source
+		nextTarget = target
 	}
 
 	newStmt, newID, err := gen.Build(ctx, nextSourceID, nextSource, nextTarget)

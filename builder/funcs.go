@@ -14,9 +14,9 @@ func optimizeZeroCopy(source *xtype.Type, target *xtype.Type) (
 	} {
 		switch {
 		case origin.Pointer && origin.PointerInner.Struct:
-			*next = source
+			*next = origin
 		case origin.Struct:
-			*next = xtype.WrapWithPtr(source)
+			*next = xtype.WrapWithPtr(origin)
 		default:
 			return
 		}
