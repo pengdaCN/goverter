@@ -129,28 +129,29 @@ func (z *ZeroCopyStruct) Build(gen Generator, ctx *MethodContext, sourceID *xtyp
 		}
 
 	assign:
-		if targetFieldType.Pointer {
-			stmt = append(stmt, targetFieldRef.Clone().Op("=").Add(jen.New(targetFieldType.PointerInner.TypeAsJen())))
-			ctx.TargetID = xtype.OtherID(jen.Id(name).Dot(targetField.Name()))
-		} else {
-			if targetFieldType.Struct {
-				nextTarget = xtype.WrapWithPtr(targetFieldType)
-				ctx.TargetID = xtype.OtherID(jen.Op("&").Add(targetFieldRef.Clone()))
-			} else {
-				ctx.TargetID = xtype.OtherID(targetFieldRef)
-			}
-		}
+		_nextSource, _nextTarget, enabledZeroCopy := optimizeZeroCopy(nextSource, nextTarget)
+		if enabledZeroCopy {
+			ctx.WantMethodKind = xtype.InSourceIn2Target
+			ctx.TargetID = xtype.OtherID(targetFieldRef.Clone())
 
-		if nextSource.Pointer {
-			sourceIsPtr = true
-		} else {
-			if nextSource.Struct {
-				nextSource = xtype.WrapWithPtr(nextSource)
+			if _nextSource.Pointer {
+				sourceIsPtr = true
+			} else {
 				nextSourceID = xtype.OtherID(jen.Op("&").Add(nextSourceID.Code.Clone()))
 			}
+
+			if _nextTarget.Pointer {
+				stmt = append(stmt, targetFieldRef.Clone().Op("=").Add(jen.New(targetFieldType.PointerInner.TypeAsJen())))
+			} else {
+				ctx.TargetID = xtype.OtherID(jen.Op("&").Add(ctx.TargetID.Code.Clone()))
+			}
+		} else {
+			ctx.WantMethodKind = xtype.InSourceOutTarget
+			_nextSource = nextSource
+			_nextTarget = nextTarget
 		}
 
-		fieldStmt, fieldID, err := gen.Build(ctx, nextSourceID, nextSource, nextTarget)
+		fieldStmt, fieldID, err := gen.Build(ctx, nextSourceID, _nextSource, _nextTarget)
 		if err != nil {
 			return nil, nil, err.Lift(&Path{
 				Prefix:     ".",
@@ -160,6 +161,7 @@ func (z *ZeroCopyStruct) Build(gen Generator, ctx *MethodContext, sourceID *xtyp
 				TargetType: targetField.Type().String(),
 			})
 		}
+		ctx.WantMethodKind = xtype.InSourceIn2Target
 
 		if sourceIsPtr {
 			if fieldID != nil {

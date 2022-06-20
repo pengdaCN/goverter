@@ -33,8 +33,8 @@ func (*List) Build(gen Generator, ctx *MethodContext, sourceID *xtype.JenID, sou
 			ctx.TargetID = xtype.OtherID(jen.Op("&").Add(ctx.TargetID.Code.Clone()))
 		}
 	} else {
-		nextSource = source
-		nextTarget = target
+		nextSource = source.ListInner
+		nextTarget = target.ListInner
 	}
 
 	newStmt, newID, err := gen.Build(ctx, nextSourceID, nextSource, nextTarget)

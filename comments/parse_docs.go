@@ -269,6 +269,7 @@ func parseConverterComment(comment string, config ConverterConfig) (ConverterCon
 				continue
 			case "ignoreUnexported":
 				config.IgnoreUnexported = true
+				continue
 			}
 			return config, fmt.Errorf("unknown %s comment: %s", prefix, line)
 		}
@@ -325,8 +326,10 @@ func parseMethodComment(comment string) (Method, error) {
 				continue
 			case "ignoreUnexported":
 				m.IgnoreUnexported = true
+				continue
 			case "unexported":
 				m.EnabledUnexportedWarn = true
+				continue
 			}
 			return m, fmt.Errorf("unknown %s comment: %s", prefix, line)
 		}

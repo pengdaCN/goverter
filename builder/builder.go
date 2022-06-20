@@ -41,14 +41,15 @@ type MethodContext struct {
 
 func (m *MethodContext) Enter() *MethodContext {
 	return &MethodContext{
-		Namer:           namer.New(),
-		Mapping:         m.Mapping,
-		IgnoredFields:   m.IgnoredFields,
-		IdentityMapping: m.IdentityMapping,
-		GlobalExtend:    m.GlobalExtend,
-		MethodExtend:    m.MethodExtend,
-		MatchIgnoreCase: m.MatchIgnoreCase,
-		NoStrict:        m.NoStrict,
-		ID:              m.ID,
+		Namer:            namer.New(),
+		Mapping:          m.Mapping,
+		IgnoredFields:    m.IgnoredFields,
+		IdentityMapping:  m.IdentityMapping,
+		GlobalExtend:     m.GlobalExtend,
+		MethodExtend:     m.MethodExtend,
+		MatchIgnoreCase:  m.MatchIgnoreCase,
+		NoStrict:         m.NoStrict,
+		IgnoreUnexported: m.IgnoreUnexported,
+		ID:               m.ID,
 	}
 }
