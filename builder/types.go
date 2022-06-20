@@ -6,13 +6,13 @@ import (
 )
 
 type MethodDefinition struct {
-	ID             string
-	Explicit       bool
-	Name           string
-	Call           *jen.Statement
-	Source         *xtype.Type
-	Target         *xtype.Type
-	ZeroCopyStruct bool
+	ID       string
+	Explicit bool
+	Name     string
+	Call     *jen.Statement
+	Source   *xtype.Type
+	Target   *xtype.Type
+	Kind     xtype.MethodKind
 
 	Jen jen.Code
 

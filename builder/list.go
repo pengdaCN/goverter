@@ -9,25 +9,35 @@ import (
 type List struct{}
 
 // Matches returns true, if the builder can create handle the given types.
-func (*List) Matches(_ *MethodContext, source, target *xtype.Type) bool {
-	return source.List && target.List && !target.ListFixed
+func (*List) Matches(source, target *xtype.Type, kind xtype.MethodKind) bool {
+	return source.List && target.List && !target.ListFixed && kind == xtype.InSourceOutTarget
 }
 
 // Build creates conversion source code for the given source and target type.
 func (*List) Build(gen Generator, ctx *MethodContext, sourceID *xtype.JenID, source, target *xtype.Type) ([]jen.Code, *xtype.JenID, *Error) {
 	var (
-		targetSlice = ctx.Name(target.ID())
-		index       = ctx.Index()
+		targetSlice                             = ctx.Name(target.ID())
+		index                                   = ctx.Index()
+		nextSource, nextTarget, enabledZeroCopy = optimizeZeroCopy(source.ListInner, target.ListInner)
+		nextSourceID                            = xtype.VariableID(sourceID.Code.Clone().Index(jen.Id(index)))
 	)
+	ctx.TargetID = xtype.OtherID(jen.Id(targetSlice).Index(jen.Id(index)))
+	if enabledZeroCopy {
+		ctx.WantMethodKind = xtype.InSourceIn2Target
 
-	switch {
-	case ctx.ZeroCopyStruct:
-		ctx.TargetID = xtype.OtherID(jen.Id(targetSlice).Index(jen.Id(index)))
+		if nextSource.Struct {
+			nextSourceID = xtype.OtherID(jen.Op("&").Add(nextSourceID.Code.Clone()))
+		}
+
+		if nextTarget.Struct {
+			ctx.TargetID = xtype.OtherID(jen.Op("&").Add(ctx.TargetID.Code.Clone()))
+		}
+	} else {
+		nextSource = source
+		nextTarget = target
 	}
 
-	indexedSource := xtype.VariableID(sourceID.Code.Clone().Index(jen.Id(index)))
-
-	newStmt, newID, err := gen.Build(ctx, indexedSource, source.ListInner, target.ListInner)
+	newStmt, newID, err := gen.Build(ctx, nextSourceID, nextSource, nextTarget)
 	if err != nil {
 		return nil, nil, err.Lift(&Path{
 			SourceID:   "[]",
@@ -37,9 +47,7 @@ func (*List) Build(gen Generator, ctx *MethodContext, sourceID *xtype.JenID, sou
 		})
 	}
 
-	mdef, ok := gen.Lookup(ctx, source.ListInner, target.ListInner)
-	switch {
-	case ok && mdef.ZeroCopyStruct:
+	if enabledZeroCopy {
 		if target.ListInner.Pointer {
 			_newStmt := make([]jen.Code, len(newStmt)+1)
 			_newStmt[0] = jen.Id(targetSlice).Index(jen.Id(index)).Op("=").Add(jen.New(target.ListInner.PointerInner.TypeAsJen()))
@@ -47,7 +55,7 @@ func (*List) Build(gen Generator, ctx *MethodContext, sourceID *xtype.JenID, sou
 
 			newStmt = _newStmt
 		}
-	default:
+	} else {
 		newStmt = append(newStmt, jen.Id(targetSlice).Index(jen.Id(index)).Op("=").Add(newID.Code))
 	}
 

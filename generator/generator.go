@@ -11,7 +11,6 @@ import (
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 	"sort"
-	"strings"
 )
 
 type generator struct {
@@ -19,50 +18,19 @@ type generator struct {
 	name   string
 	file   *jen.File
 	lookup map[xtype.Signature]*builder.MethodDefinition
-	// pkgCache caches the extend packages, saving load time
-	//pkgCache map[string][]*packages.Package
-	// workingDir is a working directory, can be empty
-	//workingDir string
 }
 
 func (g *generator) registerMethod(methodType *types.Func) error {
-	signature, ok := methodType.Type().(*types.Signature)
-	if !ok {
-		return fmt.Errorf("expected signature %#v", methodType.Type())
+	m, err := ParseMethod(methodType)
+	if err != nil {
+		return err
 	}
-	params := signature.Params()
-	if params.Len() != 1 {
-		return fmt.Errorf("expected signature to have only one parameter")
-	}
-	result := signature.Results()
-	if result.Len() < 1 || result.Len() > 2 {
-		return fmt.Errorf("return has no or too many parameters")
-	}
-	source := params.At(0).Type()
-	target := result.At(0).Type()
-	returnError := false
-	if result.Len() == 2 {
-		if i, ok := result.At(1).Type().(*types.Named); ok && i.Obj().Name() == "error" && i.Obj().Pkg() == nil {
-			returnError = true
-		} else {
-			return fmt.Errorf("second return parameter must have type error but had: %s", result.At(1).Type())
-		}
-	}
-
-	m := &builder.MethodDefinition{
-		Call:             jen.Id(xtype.ThisVar).Dot(methodType.Name()),
-		ID:               methodType.String(),
-		Explicit:         true,
-		Name:             methodType.Name(),
-		Source:           xtype.TypeOf(source),
-		Target:           xtype.TypeOf(target),
-		ReturnError:      returnError,
-		ReturnTypeOrigin: methodType.FullName(),
-	}
+	m.Explicit = true
 
 	g.lookup[xtype.Signature{
-		Source: source.String(),
-		Target: target.String(),
+		Source: m.Source.T.String(),
+		Target: m.Target.T.String(),
+		Kind:   m.Kind,
 	}] = m
 	g.namer.Register(m.Name)
 	return nil
@@ -118,28 +86,48 @@ func (g *generator) appendToFile() {
 }
 
 func (g *generator) buildMethod(ctx *builder.MethodContext, method *builder.MethodDefinition) *builder.Error {
-	sourceID := jen.Id(xtype.In)
-	source := method.Source
-
-	target := method.Target
+	var (
+		sourceID = jen.Id(xtype.In)
+		targetID = jen.Id(xtype.Out)
+		source   = method.Source
+		target   = method.Target
+	)
 
 	var (
 		returns = make([]jen.Code, 2)
 	)
 
 	if method.ReturnError {
-		returns[1] = jen.Id("error")
+		switch method.Kind {
+		case xtype.InSourceOutTarget:
+			returns[1] = jen.Id("error")
+		case xtype.InSourceIn2Target:
+			returns[0] = jen.Id("err").Add(jen.Id("error"))
+		}
 	}
 
 	ctx.TargetType = target
-	ctx.Signature = xtype.Signature{Source: method.Source.T.String(), Target: method.Target.T.String()}
+	if method.Kind == xtype.InSourceIn2Target {
+		ctx.TargetID = xtype.VariableID(targetID.Clone())
+	}
+	ctx.Signature = xtype.Signature{Source: method.Source.T.String(), Target: method.Target.T.String(), Kind: method.Kind}
+	ctx.WantMethodKind = ctx.Signature.Kind
 
 	stmt, newID, err := g.buildNoLookup(ctx, xtype.VariableID(sourceID.Clone()), source, target)
 	if err != nil {
 		return err
 	}
 
-	ret := []jen.Code{newID.Code}
+	var (
+		ret []jen.Code
+	)
+
+	switch method.Kind {
+	case xtype.InSourceOutTarget:
+		ret = []jen.Code{newID.Code}
+	case xtype.InSourceIn2Target:
+	}
+
 	if method.ReturnError {
 		ret = append(ret, jen.Nil())
 	}
@@ -149,13 +137,12 @@ func (g *generator) buildMethod(ctx *builder.MethodContext, method *builder.Meth
 	var (
 		params []jen.Code
 	)
-	switch {
-	case method.ZeroCopyStruct:
-		params = append(params, jen.Id(xtype.In).Add(jen.Op("*").Add(source.TypeAsJen())), jen.Id(xtype.Out).Add(jen.Op("*").Add(target.TypeAsJen())))
-		returns[0] = jen.Op("*").Add(target.TypeAsJen())
-	default:
+	switch method.Kind {
+	case xtype.InSourceOutTarget:
 		params = append(params, jen.Id(xtype.In).Add(source.TypeAsJen()))
 		returns[0] = target.TypeAsJen()
+	case xtype.InSourceIn2Target:
+		params = append(params, jen.Id(xtype.In).Add(source.TypeAsJen()), jen.Id(xtype.Out).Add(target.TypeAsJen()))
 	}
 
 	method.Jen = jen.Func().
@@ -174,7 +161,7 @@ func (g *generator) buildMethod(ctx *builder.MethodContext, method *builder.Meth
 
 func (g *generator) buildNoLookup(ctx *builder.MethodContext, sourceID *xtype.JenID, source, target *xtype.Type) ([]jen.Code, *xtype.JenID, *builder.Error) {
 	for _, rule := range BuildSteps {
-		if rule.Matches(ctx, source, target) {
+		if rule.Matches(source, target, ctx.WantMethodKind) {
 			return rule.Build(g, ctx, sourceID, source, target)
 		}
 	}
@@ -184,18 +171,17 @@ func (g *generator) buildNoLookup(ctx *builder.MethodContext, sourceID *xtype.Je
 // Build builds an implementation for the given source and target type, or uses an existing method for it.
 func (g *generator) Build(ctx *builder.MethodContext, sourceID *xtype.JenID, source, target *xtype.Type) ([]jen.Code, *xtype.JenID, *builder.Error) {
 	var (
-		_source   = source
-		_target   = target
 		_sourceID = sourceID
 		_targetID *xtype.JenID
 		method    *builder.MethodDefinition
 		ok        bool
 	)
 
-	_sourceID, method, ok = g._lookupExtend(ctx, source, target, sourceID)
+	_sourceID, _targetID, method, ok = _lookupExtend(ctx, source, target, sourceID)
 	if !ok {
-		_source, _target, _sourceID, _targetID = OptimizeParams(ctx, source, target, sourceID, ctx.TargetID)
-		method, ok = g._lookup(_source, _target)
+		_sourceID = sourceID
+		_targetID = ctx.TargetID
+		method, ok = g._lookup(source, target, ctx.WantMethodKind)
 	}
 
 	if ok {
@@ -207,8 +193,8 @@ func (g *generator) Build(ctx *builder.MethodContext, sourceID *xtype.JenID, sou
 		}
 		params = append(params, _sourceID.Code.Clone())
 
-		switch {
-		case method.ZeroCopyStruct:
+		switch method.Kind {
+		case xtype.InSourceIn2Target:
 			params = append(params, _targetID.Code.Clone())
 		default:
 		}
@@ -224,8 +210,8 @@ func (g *generator) Build(ctx *builder.MethodContext, sourceID *xtype.JenID, sou
 				current.Dirty = true
 			}
 
-			switch {
-			case method.ZeroCopyStruct:
+			switch method.Kind {
+			case xtype.InSourceIn2Target:
 				stmt := []jen.Code{
 					jen.List(jen.Id("err")).Op(":=").Add(
 						method.Call.Clone().Call(params...),
@@ -236,7 +222,7 @@ func (g *generator) Build(ctx *builder.MethodContext, sourceID *xtype.JenID, sou
 				}
 
 				return stmt, nil, nil
-			default:
+			case xtype.InSourceOutTarget:
 				name := ctx.Name(target.ID())
 				innerName := ctx.Name("errValue")
 				stmt := []jen.Code{
@@ -252,43 +238,43 @@ func (g *generator) Build(ctx *builder.MethodContext, sourceID *xtype.JenID, sou
 
 		stmt := method.Call.Clone().Call(params...)
 
-		switch {
-		case method.ZeroCopyStruct:
-			return []jen.Code{stmt}, nil, nil
-		default:
+		switch method.Kind {
+		case xtype.InSourceOutTarget:
 			return nil, xtype.OtherID(stmt), nil
+		case xtype.InSourceIn2Target:
+			return []jen.Code{stmt}, nil, nil
 		}
 	}
 
-	if (_source.Named && !_source.Basic) || (_target.Named && !_target.Basic) {
+	if (source.Named && !source.Basic) || (target.Named && !target.Basic) || (source.Pointer && target.Pointer && source.PointerInner.Struct && target.PointerInner.Struct) {
 		var (
 			name string
 		)
 
-		method := &builder.MethodDefinition{
-			Source: xtype.TypeOf(_source.T),
-			Target: xtype.TypeOf(_target.T),
+		m := &builder.MethodDefinition{
+			Source: xtype.TypeOf(source.T),
+			Target: xtype.TypeOf(target.T),
 		}
 
-		if _source.Struct && _target.Struct && ctx.ZeroCopyStruct {
-			method.ZeroCopyStruct = true
+		if source.Pointer && target.Pointer && source.PointerInner.Struct && target.PointerInner.Struct {
+			m.Kind = xtype.InSourceIn2Target
 		}
-		if !method.ZeroCopyStruct {
+
+		switch m.Kind {
+		case xtype.InSourceOutTarget:
 			name = g.namer.Name(source.UnescapedID() + "To" + cases.Title(language.English).String(target.UnescapedID()))
-		} else {
+		case xtype.InSourceIn2Target:
 			name = g.namer.Name(source.UnescapedID() + "Mapping" + cases.Title(language.English).String(target.UnescapedID()))
 		}
-		method.ID = name
-		method.Name = name
-		method.Call = jen.Id(xtype.ThisVar).Dot(name)
 
-		if ctx.PointerChange {
-			ctx.PointerChange = false
-		}
+		m.ID = name
+		m.Name = name
+		m.Call = jen.Id(xtype.ThisVar).Dot(name)
 
-		g.lookup[xtype.Signature{Source: _source.T.String(), Target: _target.T.String()}] = method
-		g.namer.Register(method.Name)
-		if err := g.buildMethod(ctx.Enter(), method); err != nil {
+		g.lookup[xtype.Signature{Source: source.T.String(), Target: target.T.String(), Kind: m.Kind}] = m
+
+		g.namer.Register(m.Name)
+		if err := g.buildMethod(ctx.Enter(), m); err != nil {
 			return nil, nil, err
 		}
 		// try again to trigger the found method thingy above
@@ -296,7 +282,7 @@ func (g *generator) Build(ctx *builder.MethodContext, sourceID *xtype.JenID, sou
 	}
 
 	for _, rule := range BuildSteps {
-		if rule.Matches(ctx, source, target) {
+		if rule.Matches(source, target, ctx.WantMethodKind) {
 			return rule.Build(g, ctx, sourceID, source, target)
 		}
 	}
@@ -308,108 +294,122 @@ func (g *generator) Name() string {
 	return g.name
 }
 
-func (g *generator) Lookup(ctx *builder.MethodContext, source, target *xtype.Type) (*builder.MethodDefinition, bool) {
-	_source, _target, _, _ := OptimizeParams(ctx, source, target, nil, nil)
+func (g *generator) _lookup(source, target *xtype.Type, kind xtype.MethodKind) (*builder.MethodDefinition, bool) {
+	var sign = xtype.Signature{
+		Source: source.T.String(),
+		Target: target.T.String(),
+		Kind:   kind,
+	}
 
-	return g._lookup(_source, _target)
-}
-
-func (g *generator) _lookup(source, target *xtype.Type) (*builder.MethodDefinition, bool) {
-	method, ok := g.lookup[xtype.Signature{Source: source.T.String(), Target: target.T.String()}]
-
+	method, ok := g.lookup[sign]
 	return method, ok
 }
 
-func (g *generator) _lookupExtend(ctx *builder.MethodContext, source, target *xtype.Type, sourceID *xtype.JenID) (
+func _lookupExtend(ctx *builder.MethodContext, source, target *xtype.Type, sourceID *xtype.JenID) (
 	nextSourceID *xtype.JenID,
+	nextTargetID *xtype.JenID,
 	method *builder.MethodDefinition,
 	ok bool,
 ) {
-	method, ok = ctx.MethodExtend[xtype.Signature{
-		Source: source.T.String(),
-		Target: target.T.String(),
-	}]
-	if !ok {
-		method, ok = ctx.GlobalExtend[xtype.Signature{
-			Source: source.T.String(),
-			Target: target.T.String(),
-		}]
+	const (
+		raw byte = iota + 1
+		ref
+		deref
+	)
+
+	var (
+		// source 类型能取引用
+		sourceRef = !source.Pointer && !source.List && !source.Map
+		// target 类型能取引用
+		targetRef = !target.Pointer && !target.List && !target.Map
+		// source 类型能解引用
+		sourceDeref = source.Pointer
+		sourceVerb  = []byte{raw}
+		targetVerb  = []byte{raw}
+	)
+	{
+		if sourceRef {
+			sourceVerb = append(sourceVerb, ref)
+		}
+		if targetRef {
+			targetVerb = append(targetVerb, ref)
+		}
+
+		if sourceDeref {
+			sourceVerb = append(sourceVerb, deref)
+		}
 	}
-	if !ok {
-		if source.Pointer && source.PointerType != nil {
+	for _, sVerb := range sourceVerb {
+		var (
+			sourceTy string
+		)
+		switch sVerb {
+		case raw:
+			sourceTy = source.T.String()
+			nextSourceID = xtype.OtherID(sourceID.Code.Clone())
+		case ref:
+			sourceTy = "*" + source.T.String()
+			nextSourceID = xtype.OtherID(jen.Op("&").Add(sourceID.Code.Clone()))
+		case deref:
+			sourceTy = source.PointerInner.T.String()
 			nextSourceID = xtype.OtherID(jen.Op("*").Add(sourceID.Code.Clone()))
-			method, ok = ctx.GlobalExtend[xtype.Signature{
-				Source: strings.TrimLeft(source.T.String(), "*"),
-				Target: target.T.String(),
-			}]
-			if !ok {
-				method, ok = ctx.GlobalExtend[xtype.Signature{
-					Source: strings.TrimLeft(source.T.String(), "*"),
-					Target: target.T.String(),
-				}]
-			}
-		} else {
-			if !source.Pointer {
-				nextSourceID = xtype.OtherID(jen.Op("&").Add(sourceID.Code.Clone()))
-			} else {
-				nextSourceID = sourceID
-			}
-
-			method, ok = ctx.MethodExtend[xtype.Signature{
-				Source: "*" + source.T.String(),
-				Target: target.T.String(),
-			}]
-			if !ok {
-				method, ok = ctx.GlobalExtend[xtype.Signature{
-					Source: "*" + source.T.String(),
-					Target: target.T.String(),
-				}]
-			}
 		}
 
-		return
-	}
+		for _, tVerb := range targetVerb {
+			var (
+				targetTy string
+			)
+			switch tVerb {
+			case raw:
+				targetTy = target.T.String()
 
-	nextSourceID = sourceID
+				if ctx.TargetID != nil {
+					nextTargetID = xtype.OtherID(ctx.TargetID.Code.Clone())
+				}
+			case ref:
+				if ctx.TargetID == nil {
+					continue
+				}
 
-	return
-}
+				targetTy = "*" + target.T.String()
+				nextTargetID = xtype.OtherID(jen.Op("&").Add(ctx.TargetID.Code.Clone()))
+			}
 
-func OptimizeParams(ctx *builder.MethodContext, source, target *xtype.Type, sourceID, targetID *xtype.JenID) (
-	finalSource, finalTarget *xtype.Type,
-	nextSourceID, nextTargetID *xtype.JenID,
-) {
-	switch {
-	case ctx.ZeroCopyStruct:
-		finalSource, nextSourceID = optimizeParam(source, sourceID)
-		finalTarget, nextTargetID = optimizeParam(target, targetID)
+			var sign = xtype.Signature{
+				Source: sourceTy,
+				Target: targetTy,
+				Kind:   xtype.InSourceOutTarget,
+			}
 
-	default:
-		finalSource, nextSourceID = source, sourceID
-		finalTarget, nextTargetID = target, targetID
-	}
+			for _, extends := range []map[xtype.Signature]*builder.MethodDefinition{
+				ctx.MethodExtend,
+				ctx.GlobalExtend,
+			} {
+				method, ok = extends[sign]
+				if ok {
+					return
+				}
 
-	return
-}
+				var (
+					needSearchInSourceIn2Target bool
+				)
+				// 判断是否需要InSourceIn2Target类型函数查询
+				switch tVerb {
+				case raw:
+					needSearchInSourceIn2Target = target.Pointer
+				case ref:
+					needSearchInSourceIn2Target = true
+				}
 
-func optimizeParam(param *xtype.Type, id *xtype.JenID) (
-	finalParam *xtype.Type,
-	nextID *xtype.JenID,
-) {
-	switch {
-	case param.Struct:
-		finalParam = param
-		if id != nil {
-			nextID = xtype.OtherID(jen.Op("&").Add(id.Code))
+				if needSearchInSourceIn2Target {
+					sign.Kind = xtype.InSourceIn2Target
+					method, ok = extends[sign]
+					if ok {
+						return
+					}
+				}
+			}
 		}
-
-	case param.Pointer && param.PointerInner.Struct:
-		finalParam = param.PointerInner
-		nextID = id
-
-	default:
-		finalParam = param
-		nextID = id
 	}
 
 	return

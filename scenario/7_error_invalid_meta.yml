@@ -1,9 +1,0 @@
-input:
-    input.go: |
-        package structs
-
-        // goverter:converter
-        // goverter:not_existing
-        type Converter interface {
-        }
-error: '/ABSOLUTE/execution/input.go:5:1: type Converter: unknown goverter comment: goverter:not_existing'

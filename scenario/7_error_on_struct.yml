@@ -1,7 +1,0 @@
-input:
-    input.go: |
-        package err
-
-        // goverter:converter
-        type Converter struct {}
-error: '/ABSOLUTE/execution/input.go:4:1: goverter:converter may only be applied to type interface declarations '
