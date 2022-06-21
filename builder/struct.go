@@ -134,14 +134,14 @@ func (z *ZeroCopyStruct) Build(gen Generator, ctx *MethodContext, sourceID *xtyp
 			ctx.WantMethodKind = xtype.InSourceIn2Target
 			ctx.TargetID = xtype.OtherID(targetFieldRef.Clone())
 
-			if _nextSource.Pointer {
+			if nextSource.Pointer {
 				sourceIsPtr = true
 			} else {
 				nextSourceID = xtype.OtherID(jen.Op("&").Add(nextSourceID.Code.Clone()))
 			}
 
-			if _nextTarget.Pointer {
-				stmt = append(stmt, targetFieldRef.Clone().Op("=").Add(jen.New(targetFieldType.PointerInner.TypeAsJen())))
+			if nextTarget.Pointer {
+				stmt = append(stmt, targetFieldRef.Clone().Op("=").Add(jen.New(_nextTarget.PointerInner.TypeAsJen())))
 			} else {
 				ctx.TargetID = xtype.OtherID(jen.Op("&").Add(ctx.TargetID.Code.Clone()))
 			}
