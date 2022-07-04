@@ -31,6 +31,7 @@ func (*Pointer) Build(gen Generator, ctx *MethodContext, sourceID *xtype.JenID, 
 	} else {
 		nextSourceID = xtype.OtherID(jen.Op("*").Add(sourceID.Code.Clone()))
 		nextSource = source.PointerInner
+		nextTarget = target.PointerInner
 	}
 
 	nextBlock, id, err := gen.Build(ctx, nextSourceID, nextSource, nextTarget)
