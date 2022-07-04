@@ -19,15 +19,13 @@ func (*Pointer) Build(gen Generator, ctx *MethodContext, sourceID *xtype.JenID, 
 		outerVar        = ctx.Name(target.ID())
 		innerVar        = ctx.Name(target.PointerInner.ID())
 		nextSourceID    *xtype.JenID
-		nextSource      *xtype.Type
-		nextTarget      *xtype.Type
+		nextSource      = source
+		nextTarget      = target
 		enabledZeroCopy = source.PointerInner.Struct && target.PointerInner.Struct
 	)
 
 	if enabledZeroCopy {
 		nextSourceID = xtype.OtherID(sourceID.Code.Clone())
-		nextSource = source
-		nextTarget = target
 		ctx.TargetID = xtype.OtherID(jen.Op("&").Add(jen.Id(innerVar)))
 		ctx.WantMethodKind = xtype.InSourceIn2Target
 	} else {
