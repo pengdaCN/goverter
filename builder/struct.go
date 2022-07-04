@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/dave/jennifer/jen"
-	"github.com/jmattheis/goverter/xtype"
+	"github.com/pengdaCN/goverter/xtype"
 )
 
 // Struct handles struct types.

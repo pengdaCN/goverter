@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/jmattheis/goverter/xtype"
+	"github.com/pengdaCN/goverter/xtype"
 )
 
 // New returns a new namer.

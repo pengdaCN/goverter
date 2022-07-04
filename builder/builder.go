@@ -2,8 +2,8 @@ package builder
 
 import (
 	"github.com/dave/jennifer/jen"
-	"github.com/jmattheis/goverter/namer"
-	"github.com/jmattheis/goverter/xtype"
+	"github.com/pengdaCN/goverter/namer"
+	"github.com/pengdaCN/goverter/xtype"
 )
 
 // Builder builds converter implementations, and can decide if it can handle the given type.

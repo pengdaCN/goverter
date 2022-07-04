@@ -1,6 +1,6 @@
 package builder
 
-import "github.com/jmattheis/goverter/xtype"
+import "github.com/pengdaCN/goverter/xtype"
 
 func optimizeZeroCopy(source *xtype.Type, target *xtype.Type) (
 	nextSource *xtype.Type,

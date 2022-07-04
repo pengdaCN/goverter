@@ -5,10 +5,10 @@ import (
 	"go/types"
 
 	"github.com/dave/jennifer/jen"
-	"github.com/jmattheis/goverter/builder"
-	"github.com/jmattheis/goverter/comments"
-	"github.com/jmattheis/goverter/namer"
-	"github.com/jmattheis/goverter/xtype"
+	"github.com/pengdaCN/goverter/builder"
+	"github.com/pengdaCN/goverter/comments"
+	"github.com/pengdaCN/goverter/namer"
+	"github.com/pengdaCN/goverter/xtype"
 )
 
 // Config the generate config.

@@ -2,13 +2,13 @@ package generator
 
 import (
 	"fmt"
-	"github.com/jmattheis/goverter/builder"
+	"github.com/pengdaCN/goverter/builder"
 	"go/types"
 	"golang.org/x/tools/go/packages"
 	"regexp"
 	"strings"
 
-	"github.com/jmattheis/goverter/xtype"
+	"github.com/pengdaCN/goverter/xtype"
 	"github.com/pkg/errors"
 )
 

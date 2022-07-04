@@ -3,8 +3,8 @@ package comments
 import (
 	"bufio"
 	"fmt"
-	"github.com/jmattheis/goverter/builder"
-	"github.com/jmattheis/goverter/xtype"
+	"github.com/pengdaCN/goverter/builder"
+	"github.com/pengdaCN/goverter/xtype"
 	"go/ast"
 	"go/types"
 	"sort"
