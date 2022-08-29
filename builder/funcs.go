@@ -7,7 +7,6 @@ func optimizeZeroCopy(source *xtype.Type, target *xtype.Type) (
 	nextTarget *xtype.Type,
 	zeroCopy bool,
 ) {
-
 	for origin, next := range map[*xtype.Type]**xtype.Type{
 		source: &nextSource,
 		target: &nextTarget,

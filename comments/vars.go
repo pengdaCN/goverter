@@ -5,6 +5,4 @@ import (
 	"github.com/pengdaCN/goverter/xtype"
 )
 
-var (
-	emptyExtend = make(map[xtype.Signature]*builder.MethodDefinition)
-)
+var emptyExtend = make(map[xtype.Signature]*builder.MethodDefinition)

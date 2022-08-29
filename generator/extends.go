@@ -2,11 +2,13 @@ package generator
 
 import (
 	"fmt"
-	"github.com/pengdaCN/goverter/builder"
 	"go/types"
-	"golang.org/x/tools/go/packages"
 	"regexp"
 	"strings"
+
+	"github.com/pengdaCN/goverter/builder"
+
+	"golang.org/x/tools/go/packages"
 
 	"github.com/pengdaCN/goverter/xtype"
 	"github.com/pkg/errors"
@@ -19,7 +21,7 @@ const (
 )
 
 type parseExtendContext struct {
-	//extend map[xtype.Signature]*builder.MethodDefinition
+	// extend map[xtype.Signature]*builder.MethodDefinition
 	// pkgCache caches the extend packages, saving load time
 	pkgCache map[string][]*packages.Package
 	// workingDir is a working directory, can be empty

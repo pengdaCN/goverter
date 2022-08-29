@@ -58,7 +58,7 @@ type StructField struct {
 // StructField returns the type of a struct field and its name upon successful match or
 // an error if it is not found. This method will also return a detailed error if matchIgnoreCase
 // is enabled and there are multiple non-exact matches.
-func (t Type) StructField(name string, ignoreCase bool, ignore map[string]struct{}) (*StructField, error) {
+func (t *Type) StructField(name string, ignoreCase bool, ignore map[string]struct{}) (*StructField, error) {
 	return t.innerStructField(name, ignoreCase, ignore, 1)
 }
 
@@ -66,7 +66,7 @@ const (
 	maxCycleLevel = 1000
 )
 
-func (t Type) innerStructField(name string, ignoreCase bool, ignore map[string]struct{}, level int) (*StructField, error) {
+func (t *Type) innerStructField(name string, ignoreCase bool, ignore map[string]struct{}, level int) (*StructField, error) {
 	if maxCycleLevel < level {
 		panic("the maximum recursive limit is exceeded")
 	}
@@ -230,7 +230,7 @@ func (t *Type) asID(seeNamed, escapeReserved bool) string {
 }
 
 // TypeAsJen returns a jen representation of the type.
-func (t Type) TypeAsJen() *jen.Statement {
+func (t *Type) TypeAsJen() *jen.Statement {
 	if t.Named {
 		return toCode(t.NamedType, &jen.Statement{})
 	}

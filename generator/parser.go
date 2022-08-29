@@ -2,10 +2,11 @@ package generator
 
 import (
 	"fmt"
+	"go/types"
+
 	"github.com/dave/jennifer/jen"
 	"github.com/pengdaCN/goverter/builder"
 	"github.com/pengdaCN/goverter/xtype"
-	"go/types"
 )
 
 type ParseOption struct {

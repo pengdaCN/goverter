@@ -2,15 +2,17 @@ package generator
 
 import (
 	"fmt"
+	"go/types"
+	"sort"
+
 	"github.com/dave/jennifer/jen"
 	"github.com/pengdaCN/goverter/builder"
 	"github.com/pengdaCN/goverter/comments"
 	"github.com/pengdaCN/goverter/namer"
 	"github.com/pengdaCN/goverter/xtype"
-	"go/types"
+
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
-	"sort"
 )
 
 type generator struct {
@@ -93,9 +95,7 @@ func (g *generator) buildMethod(ctx *builder.MethodContext, method *builder.Meth
 		target   = method.Target
 	)
 
-	var (
-		returns = make([]jen.Code, 2)
-	)
+	returns := make([]jen.Code, 2)
 
 	if method.ReturnError {
 		switch method.Kind {
@@ -118,9 +118,7 @@ func (g *generator) buildMethod(ctx *builder.MethodContext, method *builder.Meth
 		return err
 	}
 
-	var (
-		ret []jen.Code
-	)
+	var ret []jen.Code
 
 	switch method.Kind {
 	case xtype.InSourceOutTarget:
@@ -134,9 +132,7 @@ func (g *generator) buildMethod(ctx *builder.MethodContext, method *builder.Meth
 
 	stmt = append(stmt, jen.Return(ret...))
 
-	var (
-		params []jen.Code
-	)
+	var params []jen.Code
 	switch method.Kind {
 	case xtype.InSourceOutTarget:
 		params = append(params, jen.Id(xtype.In).Add(source.TypeAsJen()))
@@ -185,9 +181,7 @@ func (g *generator) Build(ctx *builder.MethodContext, sourceID *xtype.JenID, sou
 	}
 
 	if ok {
-		var (
-			params []jen.Code
-		)
+		var params []jen.Code
 		if method.SelfAsFirstParam {
 			params = append(params, jen.Id(xtype.ThisVar))
 		}
@@ -247,9 +241,7 @@ func (g *generator) Build(ctx *builder.MethodContext, sourceID *xtype.JenID, sou
 	}
 
 	if (source.Named && !source.Basic) || (target.Named && !target.Basic) || (source.Pointer && target.Pointer && source.PointerInner.Struct && target.PointerInner.Struct) {
-		var (
-			name string
-		)
+		var name string
 
 		m := &builder.MethodDefinition{
 			Source: xtype.TypeOf(source.T),
@@ -295,7 +287,7 @@ func (g *generator) Name() string {
 }
 
 func (g *generator) _lookup(source, target *xtype.Type, kind xtype.MethodKind) (*builder.MethodDefinition, bool) {
-	var sign = xtype.Signature{
+	sign := xtype.Signature{
 		Source: source.T.String(),
 		Target: target.T.String(),
 		Kind:   kind,
@@ -340,9 +332,7 @@ func _lookupExtend(ctx *builder.MethodContext, source, target *xtype.Type, sourc
 		}
 	}
 	for _, sVerb := range sourceVerb {
-		var (
-			sourceTy string
-		)
+		var sourceTy string
 		switch sVerb {
 		case raw:
 			sourceTy = source.T.String()
@@ -356,9 +346,7 @@ func _lookupExtend(ctx *builder.MethodContext, source, target *xtype.Type, sourc
 		}
 
 		for _, tVerb := range targetVerb {
-			var (
-				targetTy string
-			)
+			var targetTy string
 			switch tVerb {
 			case raw:
 				targetTy = target.T.String()
@@ -375,7 +363,7 @@ func _lookupExtend(ctx *builder.MethodContext, source, target *xtype.Type, sourc
 				nextTargetID = xtype.OtherID(jen.Op("&").Add(ctx.TargetID.Code.Clone()))
 			}
 
-			var sign = xtype.Signature{
+			sign := xtype.Signature{
 				Source: sourceTy,
 				Target: targetTy,
 				Kind:   xtype.InSourceOutTarget,
@@ -390,9 +378,7 @@ func _lookupExtend(ctx *builder.MethodContext, source, target *xtype.Type, sourc
 					return
 				}
 
-				var (
-					needSearchInSourceIn2Target bool
-				)
+				var needSearchInSourceIn2Target bool
 				// 判断是否需要InSourceIn2Target类型函数查询
 				switch tVerb {
 				case raw:

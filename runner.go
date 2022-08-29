@@ -60,10 +60,10 @@ func GenerateConverterFile(fileName string, c GenerateConfig) error {
 		return err
 	}
 
-	err = os.MkdirAll(path.Dir(fileName), 0755)
+	err = os.MkdirAll(path.Dir(fileName), 0o755)
 	if err != nil {
 		return err
 	}
 
-	return ioutil.WriteFile(fileName, file, 0644)
+	return ioutil.WriteFile(fileName, file, 0o644)
 }

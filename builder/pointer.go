@@ -44,9 +44,7 @@ func (*Pointer) Build(gen Generator, ctx *MethodContext, sourceID *xtype.JenID, 
 		})
 	}
 
-	var (
-		ifBlock []jen.Code
-	)
+	var ifBlock []jen.Code
 
 	if enabledZeroCopy {
 		ifBlock = append(ifBlock, jen.Var().Id(innerVar).Add(target.PointerInner.TypeAsJen()))

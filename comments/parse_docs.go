@@ -3,12 +3,13 @@ package comments
 import (
 	"bufio"
 	"fmt"
-	"github.com/pengdaCN/goverter/builder"
-	"github.com/pengdaCN/goverter/xtype"
 	"go/ast"
 	"go/types"
 	"sort"
 	"strings"
+
+	"github.com/pengdaCN/goverter/builder"
+	"github.com/pengdaCN/goverter/xtype"
 
 	"golang.org/x/tools/go/packages"
 )
@@ -86,7 +87,6 @@ func (c *Converter) BuildCtx(method string) *builder.MethodContext {
 			IgnoreUnexported: ignoreUnexported,
 			ID:               method,
 		}
-
 	} else {
 		return &builder.MethodContext{
 			GlobalExtend: c.getGlobalExtend(),

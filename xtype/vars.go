@@ -5,9 +5,7 @@ import (
 	"reflect"
 )
 
-var (
-	ptrElemOffset uintptr
-)
+var ptrElemOffset uintptr
 
 func init() {
 	ptrTy := reflect.TypeOf((*types.Pointer)(nil)).Elem()
