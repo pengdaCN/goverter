@@ -83,6 +83,7 @@ func (g *generator) appendToFile() {
 		return methods[i].Name < methods[j].Name
 	})
 	for _, method := range methods {
+		g.file.Add(jen.Comment("nolint"))
 		g.file.Add(method.Jen)
 	}
 }

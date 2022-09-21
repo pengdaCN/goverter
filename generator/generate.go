@@ -44,6 +44,7 @@ func Generate(pattern string, mapping []comments.Converter, config Config) (*jen
 		}
 
 		// create the converter struct
+		file.Add(jen.Comment("nolint"))
 		file.Type().Id(converter.Config.Name).Struct()
 
 		gen := generator{

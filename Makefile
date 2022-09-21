@@ -3,3 +3,7 @@ build:
 
 install: build
 	cp goverter ~/go/bin
+
+fmt:
+	gofumpt -w .
+	goimports -w .
