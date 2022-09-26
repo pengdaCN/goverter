@@ -243,6 +243,7 @@ func (t *TargetStruct) Build(gen Generator, ctx *MethodContext, sourceID *xtype.
 	return stmt, xtype.VariableID(jen.Id(name)), nil
 }
 
+// TODO 优化嵌入struct查找
 func mapField(_ Generator, ctx *MethodContext, targetField *types.Var, sourceID *xtype.JenID, source, target *xtype.Type) (*jen.Statement, *xtype.Type, []jen.Code, []*Path, *Error) {
 	var lift []*Path
 
