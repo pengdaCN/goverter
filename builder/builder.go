@@ -18,6 +18,12 @@ type Builder interface {
 // If no one Builder#Matches then, an error is returned.
 type Generator interface {
 	Build(ctx *MethodContext, sourceID *xtype.JenID, source, target *xtype.Type) ([]jen.Code, *xtype.JenID, *Error)
+	BuildWithExtend(ctx *MethodContext, sourceID *xtype.JenID, source, target *xtype.Type) (
+		ok bool,
+		codes []jen.Code,
+		id *xtype.JenID,
+		err *Error,
+	)
 	Name() string
 }
 

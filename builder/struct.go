@@ -76,7 +76,6 @@ func (z *ZeroCopyStruct) Build(gen Generator, ctx *MethodContext, sourceID *xtyp
 		nextTarget := targetFieldType
 		nextSourceID := sourceID
 		nextSource := source
-		var sourceIsPtr bool
 
 		if _, ignore := ctx.IgnoredFields[targetField.Name()]; ignore {
 			continue
@@ -129,7 +128,31 @@ func (z *ZeroCopyStruct) Build(gen Generator, ctx *MethodContext, sourceID *xtyp
 		}
 
 	assign:
-		_nextSource, _nextTarget, enabledZeroCopy := optimizeZeroCopy(nextSource, nextTarget)
+		var (
+			fieldStmt       []jen.Code
+			fieldID         *xtype.JenID
+			err             *Error
+			ok              bool
+			sourceIsPtr     bool
+			_nextSource     *xtype.Type
+			_nextTarget     *xtype.Type
+			enabledZeroCopy bool
+		)
+		// 开始尝试extend
+		ok, fieldStmt, fieldID, err = gen.BuildWithExtend(ctx, nextSourceID, nextSource, nextTarget)
+		if ok {
+			if err != nil {
+				return nil, nil, err
+			}
+
+			if nextSource.Pointer {
+				sourceIsPtr = true
+			}
+
+			goto assignStmt
+		}
+
+		_nextSource, _nextTarget, enabledZeroCopy = optimizeZeroCopy(nextSource, nextTarget)
 		if enabledZeroCopy {
 			ctx.WantMethodKind = xtype.InSourceIn2Target
 			ctx.TargetID = xtype.OtherID(targetFieldRef.Clone())
@@ -151,7 +174,7 @@ func (z *ZeroCopyStruct) Build(gen Generator, ctx *MethodContext, sourceID *xtyp
 			_nextTarget = nextTarget
 		}
 
-		fieldStmt, fieldID, err := gen.Build(ctx, nextSourceID, _nextSource, _nextTarget)
+		fieldStmt, fieldID, err = gen.Build(ctx, nextSourceID, _nextSource, _nextTarget)
 		if err != nil {
 			return nil, nil, err.Lift(&Path{
 				Prefix:     ".",
@@ -163,6 +186,7 @@ func (z *ZeroCopyStruct) Build(gen Generator, ctx *MethodContext, sourceID *xtyp
 		}
 		ctx.WantMethodKind = xtype.InSourceIn2Target
 
+	assignStmt:
 		if sourceIsPtr {
 			if fieldID != nil {
 				fieldStmt = append(fieldStmt, targetFieldRef.Clone().Op("=").Add(fieldID.Code))

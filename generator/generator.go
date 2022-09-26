@@ -167,78 +167,9 @@ func (g *generator) buildNoLookup(ctx *builder.MethodContext, sourceID *xtype.Je
 
 // Build builds an implementation for the given source and target type, or uses an existing method for it.
 func (g *generator) Build(ctx *builder.MethodContext, sourceID *xtype.JenID, source, target *xtype.Type) ([]jen.Code, *xtype.JenID, *builder.Error) {
-	var (
-		_sourceID = sourceID
-		_targetID *xtype.JenID
-		method    *builder.MethodDefinition
-		ok        bool
-	)
-
-	_sourceID, _targetID, method, ok = _lookupExtend(ctx, source, target, sourceID)
-	if !ok {
-		_sourceID = sourceID
-		_targetID = ctx.TargetID
-		method, ok = g._lookup(source, target, ctx.WantMethodKind)
-	}
-
+	ok, codes, id, err := g.BuildWithExtend(ctx, sourceID, source, target)
 	if ok {
-		var params []jen.Code
-		if method.SelfAsFirstParam {
-			params = append(params, jen.Id(xtype.ThisVar))
-		}
-		params = append(params, _sourceID.Code.Clone())
-
-		switch method.Kind {
-		case xtype.InSourceIn2Target:
-			params = append(params, _targetID.Code.Clone())
-		default:
-		}
-
-		if method.ReturnError {
-			current := g.lookup[ctx.Signature]
-			if !current.ReturnError {
-				if current.Explicit {
-					return nil, nil, builder.NewError(fmt.Sprintf("ReturnTypeMismatch: Cannot use\n\n    %s\n\nin\n\n    %s\n\nbecause no error is returned as second parameter", method.ReturnTypeOrigin, current.ID))
-				}
-				current.ReturnError = true
-				current.ReturnTypeOrigin = method.ID
-				current.Dirty = true
-			}
-
-			switch method.Kind {
-			case xtype.InSourceIn2Target:
-				stmt := []jen.Code{
-					jen.List(jen.Id("err")).Op(":=").Add(
-						method.Call.Clone().Call(params...),
-					),
-					jen.If(jen.Id("err").Op("!=").Nil()).Block(
-						jen.Return(jen.Id("err")),
-					),
-				}
-
-				return stmt, nil, nil
-			case xtype.InSourceOutTarget:
-				name := ctx.Name(target.ID())
-				innerName := ctx.Name("errValue")
-				stmt := []jen.Code{
-					jen.List(jen.Id(name), jen.Id("err")).Op(":=").Add(method.Call.Clone().Call(params...)),
-					jen.If(jen.Id("err").Op("!=").Nil()).Block(
-						jen.Var().Id(innerName).Add(ctx.TargetType.TypeAsJen()),
-						jen.Return(jen.Id(innerName), jen.Id("err")),
-					),
-				}
-				return stmt, xtype.VariableID(jen.Id(name)), nil
-			}
-		}
-
-		stmt := method.Call.Clone().Call(params...)
-
-		switch method.Kind {
-		case xtype.InSourceOutTarget:
-			return nil, xtype.OtherID(stmt), nil
-		case xtype.InSourceIn2Target:
-			return []jen.Code{stmt}, nil, nil
-		}
+		return codes, id, err
 	}
 
 	if (source.Named && !source.Basic) || (target.Named && !target.Basic) || (source.Pointer && target.Pointer && source.PointerInner.Struct && target.PointerInner.Struct) {
@@ -281,6 +212,93 @@ func (g *generator) Build(ctx *builder.MethodContext, sourceID *xtype.JenID, sou
 	}
 
 	return nil, nil, builder.NewError(fmt.Sprintf("TypeMismatch: Cannot convert %s to %s", source.T, target.T))
+}
+
+func (g *generator) BuildWithExtend(ctx *builder.MethodContext, sourceID *xtype.JenID, source, target *xtype.Type) (
+	ok bool,
+	codes []jen.Code,
+	id *xtype.JenID,
+	err *builder.Error,
+) {
+	var (
+		_sourceID = sourceID
+		_targetID *xtype.JenID
+		method    *builder.MethodDefinition
+	)
+
+	_sourceID, _targetID, method, ok = _lookupExtend(ctx, source, target, sourceID)
+	if !ok {
+		_sourceID = sourceID
+		_targetID = ctx.TargetID
+		method, ok = g._lookup(source, target, ctx.WantMethodKind)
+	}
+
+	if ok {
+		var params []jen.Code
+		if method.SelfAsFirstParam {
+			params = append(params, jen.Id(xtype.ThisVar))
+		}
+		params = append(params, _sourceID.Code.Clone())
+
+		switch method.Kind {
+		case xtype.InSourceIn2Target:
+			params = append(params, _targetID.Code.Clone())
+		default:
+		}
+
+		if method.ReturnError {
+			current := g.lookup[ctx.Signature]
+			if !current.ReturnError {
+				if current.Explicit {
+					err = builder.NewError(fmt.Sprintf("ReturnTypeMismatch: Cannot use\n\n    %s\n\nin\n\n    %s\n\nbecause no error is returned as second parameter", method.ReturnTypeOrigin, current.ID))
+					return
+				}
+				current.ReturnError = true
+				current.ReturnTypeOrigin = method.ID
+				current.Dirty = true
+			}
+
+			switch method.Kind {
+			case xtype.InSourceIn2Target:
+				stmt := []jen.Code{
+					jen.List(jen.Id("err")).Op(":=").Add(
+						method.Call.Clone().Call(params...),
+					),
+					jen.If(jen.Id("err").Op("!=").Nil()).Block(
+						jen.Return(jen.Id("err")),
+					),
+				}
+				codes = stmt
+				return
+			case xtype.InSourceOutTarget:
+				name := ctx.Name(target.ID())
+				innerName := ctx.Name("errValue")
+				codes = []jen.Code{
+					jen.List(jen.Id(name), jen.Id("err")).Op(":=").Add(method.Call.Clone().Call(params...)),
+					jen.If(jen.Id("err").Op("!=").Nil()).Block(
+						jen.Var().Id(innerName).Add(ctx.TargetType.TypeAsJen()),
+						jen.Return(jen.Id(innerName), jen.Id("err")),
+					),
+				}
+				id = xtype.VariableID(jen.Id(name))
+
+				return
+			}
+		}
+
+		stmt := method.Call.Clone().Call(params...)
+
+		switch method.Kind {
+		case xtype.InSourceOutTarget:
+			id = xtype.OtherID(stmt)
+		case xtype.InSourceIn2Target:
+			codes = []jen.Code{stmt}
+		}
+
+		return
+	}
+
+	return
 }
 
 func (g *generator) Name() string {
