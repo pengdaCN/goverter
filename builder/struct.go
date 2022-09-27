@@ -6,6 +6,8 @@ import (
 	"log"
 	"strings"
 
+	"github.com/samber/lo"
+
 	"github.com/dave/jennifer/jen"
 	"github.com/pengdaCN/goverter/xtype"
 )
@@ -110,11 +112,11 @@ func (z *ZeroCopyStruct) Build(gen Generator, ctx *MethodContext, sourceID *xtyp
 				err    *Error
 			)
 
-			findCtx := ctx.Enter()
+			findCtx := ctx.EnterWithNamer()
 			findCtx.Signature.Source = innerSource.T.String()
 			findCtx.Signature.Target = innerTarget.T.String()
 
-			nextID, nextSource, mapStmt, _, err = mapField(gen, findCtx, targetField, sourceID, innerSource, innerTarget)
+			nextID, nextSource, mapStmt, _, err = mapField(findCtx, targetField, sourceID, innerSource, innerTarget)
 			if err != nil {
 				if ctx.NoStrict {
 					log.Printf("(%s.%s)warn: Cannot match the target field with the source entry %s\n", gen.Name(), ctx.ID, strings.Join([]string{target.T.String(), targetField.Name()}, "."))
@@ -243,11 +245,20 @@ func (t *TargetStruct) Build(gen Generator, ctx *MethodContext, sourceID *xtype.
 	return stmt, xtype.VariableID(jen.Id(name)), nil
 }
 
-// TODO 优化嵌入struct查找
-func mapField(_ Generator, ctx *MethodContext, targetField *types.Var, sourceID *xtype.JenID, source, target *xtype.Type) (*jen.Statement, *xtype.Type, []jen.Code, []*Path, *Error) {
+func mapField(
+	ctx *MethodContext,
+	targetField *types.Var,
+	sourceID *xtype.JenID,
+	source, target *xtype.Type,
+) (
+	*jen.Statement,
+	*xtype.Type,
+	[]jen.Code,
+	[]*Path, *Error,
+) {
 	var lift []*Path
 
-	mappedName, hasOverride := ctx.Mapping[targetField.Name()]
+	mappedName, hasOverride := searchRefPathWithMapping(source, ctx, targetField.Name())
 	if ctx.Signature.Target != target.T.String() || !hasOverride {
 		sourceMatch, err := source.StructField(targetField.Name(), ctx.MatchIgnoreCase, ctx.IgnoredFields)
 		if err == nil {
@@ -324,14 +335,29 @@ func mapField(_ Generator, ctx *MethodContext, targetField *types.Var, sourceID 
 			SourceType: "???",
 		}).Lift(lift...)
 	}
+
 	if condition != nil {
-		pointerNext := nextSource
-		if !nextSource.Pointer {
-			pointerNext = xtype.TypeOf(types.NewPointer(nextSource.T))
+		var (
+			isCopyable = true
+			wrapType   = nextSource
+		)
+
+		{
+			next := nextSource
+			for next.Named {
+				next = xtype.TypeOf(next.NamedType.Underlying())
+			}
+			if next.Struct || next.Named {
+				if next.Struct {
+					wrapType = xtype.TypeOf(types.NewPointer(nextSource.T))
+					isCopyable = false
+				}
+			}
 		}
-		tempName := ctx.Name(pointerNext.ID())
-		stmt = append(stmt, jen.Var().Id(tempName).Add(pointerNext.TypeAsJen()))
-		if nextSource.Pointer {
+
+		tempName := ctx.Name(wrapType.ID())
+		stmt = append(stmt, jen.Var().Id(tempName).Add(wrapType.TypeAsJen()))
+		if isCopyable {
 			stmt = append(stmt, jen.If(condition).Block(
 				jen.Id(tempName).Op("=").Add(nextID.Clone()),
 			))
@@ -340,11 +366,67 @@ func mapField(_ Generator, ctx *MethodContext, targetField *types.Var, sourceID 
 				jen.Id(tempName).Op("=").Op("&").Add(nextID.Clone()),
 			))
 		}
-		nextSource = pointerNext
+		nextSource = wrapType
 		nextID = jen.Id(tempName)
 	}
 
 	return nextID, nextSource, stmt, lift, nil
+}
+
+func searchRefPathWithMapping(source *xtype.Type, ctx *MethodContext, field string) (string, bool) {
+	const (
+		maxFindTimes = 1000
+	)
+
+	mapping, ok := ctx.Mapping[field]
+	if ok {
+		return mapping, ok
+	}
+
+	searchTypes := []lo.Tuple2[string, *xtype.Type]{
+		{
+			A: "",
+			B: source,
+		},
+	}
+	var path strings.Builder
+	for searchStep := 0; len(searchTypes) > searchStep && searchStep < maxFindTimes; searchStep++ {
+		prefix := searchTypes[searchStep].A
+		nextSource := searchTypes[searchStep].B
+		sourceMatch, err := nextSource.StructField(field, ctx.MatchIgnoreCase, ctx.IgnoredFields)
+		if err == nil {
+			if prefix != "" {
+				path.WriteString(prefix)
+				path.WriteString(".")
+			}
+
+			path.WriteString(sourceMatch.Name)
+
+			return path.String(), true
+		}
+
+		embedFields := nextSource.EmbedField()
+		if len(embedFields) != 0 {
+			searchTypes = append(searchTypes, lo.Map(embedFields, func(v lo.Tuple2[string, *xtype.Type], _ int) lo.Tuple2[string, *xtype.Type] {
+				for v.B.Pointer {
+					v.B = v.B.PointerInner
+				}
+
+				if prefix == "" {
+					return v
+				}
+
+				v.A = strings.Join([]string{
+					prefix,
+					v.A,
+				}, ".")
+
+				return v
+			})...)
+		}
+	}
+
+	return "", false
 }
 
 func unexportedStructError(targetField, sourceType, targetType string) string {

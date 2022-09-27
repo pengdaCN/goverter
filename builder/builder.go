@@ -59,3 +59,18 @@ func (m *MethodContext) Enter() *MethodContext {
 		ID:               m.ID,
 	}
 }
+
+func (m *MethodContext) EnterWithNamer() *MethodContext {
+	return &MethodContext{
+		Namer:            m.Namer,
+		Mapping:          m.Mapping,
+		IgnoredFields:    m.IgnoredFields,
+		IdentityMapping:  m.IdentityMapping,
+		GlobalExtend:     m.GlobalExtend,
+		MethodExtend:     m.MethodExtend,
+		MatchIgnoreCase:  m.MatchIgnoreCase,
+		NoStrict:         m.NoStrict,
+		IgnoreUnexported: m.IgnoreUnexported,
+		ID:               m.ID,
+	}
+}

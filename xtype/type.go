@@ -6,6 +6,8 @@ import (
 	"strings"
 	"unsafe"
 
+	"github.com/samber/lo"
+
 	"github.com/dave/jennifer/jen"
 )
 
@@ -59,18 +61,6 @@ type StructField struct {
 // an error if it is not found. This method will also return a detailed error if matchIgnoreCase
 // is enabled and there are multiple non-exact matches.
 func (t *Type) StructField(name string, ignoreCase bool, ignore map[string]struct{}) (*StructField, error) {
-	return t.innerStructField(name, ignoreCase, ignore, 1)
-}
-
-const (
-	maxCycleLevel = 1000
-)
-
-func (t *Type) innerStructField(name string, ignoreCase bool, ignore map[string]struct{}, level int) (*StructField, error) {
-	if maxCycleLevel < level {
-		panic("the maximum recursive limit is exceeded")
-	}
-
 	if !t.Struct {
 		panic("trying to get field of non struct")
 	}
@@ -81,14 +71,6 @@ func (t *Type) innerStructField(name string, ignoreCase bool, ignore map[string]
 		if _, ignored := ignore[m.Name()]; ignored {
 			continue
 		}
-
-		if m.Embedded() {
-			field, err := TypeOf(m.Type()).innerStructField(name, ignoreCase, nil, level+1)
-			if err == nil {
-				return field, nil
-			}
-		}
-
 		if m.Name() == name {
 			// exact match takes precedence over case-insensitive match
 			return &StructField{Name: m.Name(), Type: TypeOf(m.Type())}, nil
@@ -112,6 +94,73 @@ func (t *Type) innerStructField(name string, ignoreCase bool, ignore map[string]
 		return nil, ambiguousMatchError(name, ambNames)
 	}
 }
+
+func (t *Type) EmbedField() []lo.Tuple2[string, *Type] {
+	var embed []lo.Tuple2[string, *Type]
+	for y := 0; y < t.StructType.NumFields(); y++ {
+		m := t.StructType.Field(y)
+
+		if m.Embedded() {
+			embed = append(embed, lo.Tuple2[string, *Type]{
+				A: m.Name(),
+				B: TypeOf(m.Type()),
+			})
+		}
+	}
+
+	return embed
+}
+
+//const (
+//	maxCycleLevel = 1000
+//)
+//
+//func (t *Type) innerStructField(name string, ignoreCase bool, ignore map[string]struct{}, level int) (*StructField, error) {
+//	if maxCycleLevel < level {
+//		panic("the maximum recursive limit is exceeded")
+//	}
+//
+//	if !t.Struct {
+//		panic("trying to get field of non struct")
+//	}
+//
+//	var ambMatches []*StructField
+//	for y := 0; y < t.StructType.NumFields(); y++ {
+//		m := t.StructType.Field(y)
+//		if _, ignored := ignore[m.Name()]; ignored {
+//			continue
+//		}
+//
+//		if m.Embedded() {
+//			field, err := TypeOf(m.Type()).innerStructField(name, ignoreCase, nil, level+1)
+//			if err == nil {
+//				return field, nil
+//			}
+//		}
+//
+//		if m.Name() == name {
+//			// exact match takes precedence over case-insensitive match
+//			return &StructField{Name: m.Name(), Type: TypeOf(m.Type())}, nil
+//		}
+//		if ignoreCase && strings.EqualFold(m.Name(), name) {
+//			ambMatches = append(ambMatches, &StructField{Name: m.Name(), Type: TypeOf(m.Type())})
+//			// keep going to ensure struct does not have another case-insensitive match
+//		}
+//	}
+//
+//	switch len(ambMatches) {
+//	case 0:
+//		return nil, fmt.Errorf("%q does not exist", name)
+//	case 1:
+//		return ambMatches[0], nil
+//	default:
+//		ambNames := make([]string, 0, len(ambMatches))
+//		for _, m := range ambMatches {
+//			ambNames = append(ambNames, m.Name)
+//		}
+//		return nil, ambiguousMatchError(name, ambNames)
+//	}
+//}
 
 // JenID a jennifer code wrapper with extra infos.
 type JenID struct {
