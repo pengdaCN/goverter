@@ -347,11 +347,9 @@ func mapField(
 			for next.Named {
 				next = xtype.TypeOf(next.NamedType.Underlying())
 			}
-			if next.Struct || next.Named {
-				if next.Struct {
-					wrapType = xtype.TypeOf(types.NewPointer(next.T))
-					isCopyable = false
-				}
+			if next.Struct {
+				wrapType = xtype.TypeOf(types.NewPointer(next.T))
+				isCopyable = false
 			}
 		}
 
