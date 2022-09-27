@@ -349,7 +349,7 @@ func mapField(
 			}
 			if next.Struct || next.Named {
 				if next.Struct {
-					wrapType = xtype.TypeOf(types.NewPointer(nextSource.T))
+					wrapType = xtype.TypeOf(types.NewPointer(next.T))
 					isCopyable = false
 				}
 			}
