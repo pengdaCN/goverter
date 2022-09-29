@@ -67,30 +67,32 @@ func (t *Type) StructField(name, tag string, ignoreCase bool, ignore map[string]
 	}
 
 	// 优先进行tag查找
+	var ambMatches []*StructField
 	if len(searchTags) != 0 && tag != "" {
 		for i := 0; i < t.StructType.NumFields(); i++ {
 			fld := t.StructType.Field(i)
 			fldTag := t.StructType.Tag(i)
 
 			if tagMatch(fldTag, tag, searchTags) {
-				return &StructField{Name: fld.Name(), Type: TypeOf(fld.Type())}, nil
+				ambMatches = append(ambMatches, &StructField{Name: fld.Name(), Type: TypeOf(fld.Type())})
 			}
 		}
 	}
 
-	var ambMatches []*StructField
-	for y := 0; y < t.StructType.NumFields(); y++ {
-		m := t.StructType.Field(y)
-		if _, ignored := ignore[m.Name()]; ignored {
-			continue
-		}
-		if m.Name() == name {
-			// exact match takes precedence over case-insensitive match
-			return &StructField{Name: m.Name(), Type: TypeOf(m.Type())}, nil
-		}
-		if ignoreCase && strings.EqualFold(m.Name(), name) {
-			ambMatches = append(ambMatches, &StructField{Name: m.Name(), Type: TypeOf(m.Type())})
-			// keep going to ensure struct does not have another case-insensitive match
+	if len(ambMatches) == 0 {
+		for y := 0; y < t.StructType.NumFields(); y++ {
+			m := t.StructType.Field(y)
+			if _, ignored := ignore[m.Name()]; ignored {
+				continue
+			}
+			if m.Name() == name {
+				// exact match takes precedence over case-insensitive match
+				return &StructField{Name: m.Name(), Type: TypeOf(m.Type())}, nil
+			}
+			if ignoreCase && strings.EqualFold(m.Name(), name) {
+				ambMatches = append(ambMatches, &StructField{Name: m.Name(), Type: TypeOf(m.Type())})
+				// keep going to ensure struct does not have another case-insensitive match
+			}
 		}
 	}
 
@@ -135,7 +137,7 @@ func getTagFirstValue(v string) string {
 		return v
 	}
 
-	return v[:idx-1]
+	return v[:idx]
 }
 
 func (t *Type) EmbedField() []lo.Tuple2[string, *Type] {
