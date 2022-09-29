@@ -3,6 +3,7 @@ package xtype
 import (
 	"fmt"
 	"go/types"
+	"reflect"
 	"strings"
 	"unsafe"
 
@@ -60,9 +61,21 @@ type StructField struct {
 // StructField returns the type of a struct field and its name upon successful match or
 // an error if it is not found. This method will also return a detailed error if matchIgnoreCase
 // is enabled and there are multiple non-exact matches.
-func (t *Type) StructField(name string, ignoreCase bool, ignore map[string]struct{}) (*StructField, error) {
+func (t *Type) StructField(name, tag string, ignoreCase bool, ignore map[string]struct{}, searchTags []string) (*StructField, error) {
 	if !t.Struct {
 		panic("trying to get field of non struct")
+	}
+
+	// 优先进行tag查找
+	if len(searchTags) != 0 && tag != "" {
+		for i := 0; i < t.StructType.NumFields(); i++ {
+			fld := t.StructType.Field(i)
+			fldTag := t.StructType.Tag(i)
+
+			if tagMatch(fldTag, tag, searchTags) {
+				return &StructField{Name: fld.Name(), Type: TypeOf(fld.Type())}, nil
+			}
+		}
 	}
 
 	var ambMatches []*StructField
@@ -93,6 +106,36 @@ func (t *Type) StructField(name string, ignoreCase bool, ignore map[string]struc
 		}
 		return nil, ambiguousMatchError(name, ambNames)
 	}
+}
+
+func tagMatch(tag1, tag2 string, searchTags []string) bool {
+	t1 := reflect.StructTag(tag1)
+	t2 := reflect.StructTag(tag2)
+
+	for _, key := range searchTags {
+		v1 := getTagFirstValue(t1.Get(key))
+		v2 := getTagFirstValue(t2.Get(key))
+
+		if v1 == "" || v2 == "" {
+			continue
+		}
+
+		if v1 == v2 {
+			return true
+		}
+	}
+
+	return false
+}
+
+func getTagFirstValue(v string) string {
+	const seq = ","
+	idx := strings.Index(v, seq)
+	if idx < 0 {
+		return v
+	}
+
+	return v[:idx-1]
 }
 
 func (t *Type) EmbedField() []lo.Tuple2[string, *Type] {

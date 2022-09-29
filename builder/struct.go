@@ -73,6 +73,7 @@ func (z *ZeroCopyStruct) Build(gen Generator, ctx *MethodContext, sourceID *xtyp
 
 	for i := 0; i < innerTarget.StructType.NumFields(); i++ {
 		targetField := innerTarget.StructType.Field(i)
+		targetFieldTag := innerTarget.StructType.Tag(i)
 		targetFieldType := xtype.TypeOf(targetField.Type())
 		targetFieldRef := jen.Id(name).Dot(targetField.Name())
 		nextTarget := targetFieldType
@@ -116,7 +117,7 @@ func (z *ZeroCopyStruct) Build(gen Generator, ctx *MethodContext, sourceID *xtyp
 			findCtx.Signature.Source = innerSource.T.String()
 			findCtx.Signature.Target = innerTarget.T.String()
 
-			nextID, nextSource, mapStmt, _, err = mapField(findCtx, targetField, sourceID, innerSource, innerTarget)
+			nextID, nextSource, mapStmt, _, err = mapField(findCtx, targetField, targetFieldTag, sourceID, innerSource, innerTarget)
 			if err != nil {
 				if ctx.NoStrict {
 					log.Printf("(%s.%s)warn: Cannot match the target field with the source entry %s\n", gen.Name(), ctx.ID, strings.Join([]string{target.T.String(), targetField.Name()}, "."))
@@ -248,6 +249,7 @@ func (t *TargetStruct) Build(gen Generator, ctx *MethodContext, sourceID *xtype.
 func mapField(
 	ctx *MethodContext,
 	targetField *types.Var,
+	targetFiledTag string,
 	sourceID *xtype.JenID,
 	source, target *xtype.Type,
 ) (
@@ -258,9 +260,9 @@ func mapField(
 ) {
 	var lift []*Path
 
-	mappedName, hasOverride := searchRefPathWithMapping(source, ctx, targetField.Name())
+	mappedName, hasOverride := searchRefPathWithMapping(source, ctx, targetField.Name(), targetFiledTag, ctx.SearchTag)
 	if ctx.Signature.Target != target.T.String() || !hasOverride {
-		sourceMatch, err := source.StructField(targetField.Name(), ctx.MatchIgnoreCase, ctx.IgnoredFields)
+		sourceMatch, err := source.StructField(targetField.Name(), targetFiledTag, ctx.MatchIgnoreCase, ctx.IgnoredFields, ctx.SearchTag)
 		if err == nil {
 			nextID := sourceID.Code.Clone().Dot(sourceMatch.Name)
 			lift = append(lift, &Path{
@@ -307,7 +309,7 @@ func mapField(
 			}).Lift(lift...)
 		}
 		// since we are searching for a mapped name, search for exact match, explicit field map does not ignore case
-		sourceMatch, err := nextSource.StructField(path[i], false, ctx.IgnoredFields)
+		sourceMatch, err := nextSource.StructField(path[i], "", false, ctx.IgnoredFields, nil)
 		if err == nil {
 			nextSource = sourceMatch.Type
 			nextID = nextID.Clone().Dot(sourceMatch.Name)
@@ -371,7 +373,7 @@ func mapField(
 	return nextID, nextSource, stmt, lift, nil
 }
 
-func searchRefPathWithMapping(source *xtype.Type, ctx *MethodContext, field string) (string, bool) {
+func searchRefPathWithMapping(source *xtype.Type, ctx *MethodContext, field string, tag string, tags []string) (string, bool) {
 	const (
 		maxFindTimes = 1000
 	)
@@ -391,7 +393,7 @@ func searchRefPathWithMapping(source *xtype.Type, ctx *MethodContext, field stri
 	for searchStep := 0; len(searchTypes) > searchStep && searchStep < maxFindTimes; searchStep++ {
 		prefix := searchTypes[searchStep].A
 		nextSource := searchTypes[searchStep].B
-		sourceMatch, err := nextSource.StructField(field, ctx.MatchIgnoreCase, ctx.IgnoredFields)
+		sourceMatch, err := nextSource.StructField(field, tag, ctx.MatchIgnoreCase, ctx.IgnoredFields, tags)
 		if err == nil {
 			if prefix != "" {
 				path.WriteString(prefix)

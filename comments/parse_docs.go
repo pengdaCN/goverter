@@ -47,6 +47,7 @@ type ConverterConfig struct {
 	ExtendMethods    []string
 	NoStrict         bool
 	IgnoreUnexported bool
+	UseTag           []string
 }
 
 // Method contains settings that can be set via comments.
@@ -61,6 +62,8 @@ type Method struct {
 	IgnoreUnexported      bool
 	EnabledUnexportedWarn bool
 	ExtendMethods         []string
+	IgnoreTag             bool
+	Tag                   []string
 }
 
 func (c *Converter) BuildCtx(method string) *builder.MethodContext {
@@ -75,22 +78,32 @@ func (c *Converter) BuildCtx(method string) *builder.MethodContext {
 		ignoreUnexported = !m.EnabledUnexportedWarn
 	}
 
-	if ok {
-		return &builder.MethodContext{
-			GlobalExtend:     c.globalExtend,
-			MethodExtend:     c.getSpecificExtend(method),
-			Mapping:          m.NameMapping,
-			MatchIgnoreCase:  m.MatchIgnoreCase,
-			IgnoredFields:    m.IgnoredFields,
-			IdentityMapping:  m.IdentityMapping,
-			NoStrict:         noStrict,
-			IgnoreUnexported: ignoreUnexported,
-			ID:               method,
+	var tag []string
+	if !m.IgnoreTag {
+		tag = c.Config.UseTag
+
+		if len(m.Tag) != 0 {
+			tag = m.Tag
 		}
-	} else {
+	}
+
+	if !ok {
 		return &builder.MethodContext{
 			GlobalExtend: c.getGlobalExtend(),
 		}
+	}
+
+	return &builder.MethodContext{
+		GlobalExtend:     c.globalExtend,
+		MethodExtend:     c.getSpecificExtend(method),
+		SearchTag:        tag,
+		Mapping:          m.NameMapping,
+		MatchIgnoreCase:  m.MatchIgnoreCase,
+		IgnoredFields:    m.IgnoredFields,
+		IdentityMapping:  m.IdentityMapping,
+		NoStrict:         noStrict,
+		IgnoreUnexported: ignoreUnexported,
+		ID:               method,
 	}
 }
 
@@ -270,6 +283,13 @@ func parseConverterComment(comment string, config ConverterConfig) (ConverterCon
 			case "ignoreUnexported":
 				config.IgnoreUnexported = true
 				continue
+			case "tag":
+				if len(fields) == 0 {
+					return config, fmt.Errorf("invalid %s:tag must have one parameter", prefix)
+				}
+
+				config.UseTag = fields
+				continue
 			}
 			return config, fmt.Errorf("unknown %s comment: %s", prefix, line)
 		}
@@ -329,6 +349,16 @@ func parseMethodComment(comment string) (Method, error) {
 				continue
 			case "unexported":
 				m.EnabledUnexportedWarn = true
+				continue
+			case "noTag":
+				m.IgnoreTag = true
+				continue
+			case "tag":
+				if len(fields) == 0 {
+					return m, fmt.Errorf("invalid %s:tag must have one parameter", prefix)
+				}
+
+				m.Tag = fields
 				continue
 			}
 			return m, fmt.Errorf("unknown %s comment: %s", prefix, line)

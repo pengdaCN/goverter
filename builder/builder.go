@@ -35,6 +35,7 @@ type MethodContext struct {
 	IdentityMapping  map[string]struct{}
 	GlobalExtend     map[xtype.Signature]*MethodDefinition
 	MethodExtend     map[xtype.Signature]*MethodDefinition
+	SearchTag        []string
 	Signature        xtype.Signature
 	TargetType       *xtype.Type
 	WantMethodKind   xtype.MethodKind
@@ -57,6 +58,7 @@ func (m *MethodContext) Enter() *MethodContext {
 		NoStrict:         m.NoStrict,
 		IgnoreUnexported: m.IgnoreUnexported,
 		ID:               m.ID,
+		SearchTag:        m.SearchTag,
 	}
 }
 
@@ -72,5 +74,6 @@ func (m *MethodContext) EnterWithNamer() *MethodContext {
 		NoStrict:         m.NoStrict,
 		IgnoreUnexported: m.IgnoreUnexported,
 		ID:               m.ID,
+		SearchTag:        m.SearchTag,
 	}
 }

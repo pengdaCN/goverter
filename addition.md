@@ -68,7 +68,23 @@ type User {
    
    在官方extend标识只能在interface使用的基础上，我们进行扩展，使其能够在方法上使用
 
-6. ##### 扩展可以生成拷贝的模式
+6. ##### 扩展tag标识
+   
+   示例
+   
+   ```
+   tag json xml toml
+   ```
+   
+   该标识的作用是在配置结构体字段时，优先查看tag指定的标签，若标签值相等，匹配上字段，按照顺序优先，第一个优先级最高
+   
+   能够在interface method上使用
+
+7. ##### 扩展noTag标识
+   
+   在method上使用，代表不使用tag，优先级最高
+
+8. ##### 扩展可以生成拷贝的模式
    
    1. 针对所有可以转换成struct对struct的拷贝，我们在生成函数时，将struct to struct 装变为struct pointer to struct pointer 以减少内存的拷贝，同时，对不可复制类型做到了保护
    
