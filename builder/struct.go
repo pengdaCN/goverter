@@ -79,6 +79,7 @@ func (z *ZeroCopyStruct) Build(gen Generator, ctx *MethodContext, sourceID *xtyp
 		nextTarget := targetFieldType
 		nextSourceID := sourceID
 		nextSource := source
+		ctx.TargetID = xtype.OtherID(targetFieldRef.Clone())
 
 		if _, ignore := ctx.IgnoredFields[targetField.Name()]; ignore {
 			continue
