@@ -25,11 +25,11 @@ func (*List) Build(gen Generator, ctx *MethodContext, sourceID *xtype.JenID, sou
 	if enabledZeroCopy {
 		ctx.WantMethodKind = xtype.InSourceIn2Target
 
-		if nextSource.Struct {
+		if source.ListInner.Struct {
 			nextSourceID = xtype.OtherID(jen.Op("&").Add(nextSourceID.Code.Clone()))
 		}
 
-		if nextTarget.Struct {
+		if target.ListInner.Struct {
 			ctx.TargetID = xtype.OtherID(jen.Op("&").Add(ctx.TargetID.Code.Clone()))
 		}
 	} else {
