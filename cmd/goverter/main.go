@@ -9,13 +9,21 @@ import (
 	"github.com/pengdaCN/goverter"
 )
 
+var version = "v1.0.6"
+
 func main() {
 	packageName := flag.String("packageName", "generated", "")
 	output := flag.String("output", "./generated/generated.go", "")
 	extends := flag.String("extends", "", "comma separated list of local or package extends")
 	packagePath := flag.String("packagePath", "", "optional full package path for the generated code")
+	showVersion := flag.Bool("version", false, "print program version")
 
 	flag.Parse()
+
+	if *showVersion {
+		println("version:", version)
+		return
+	}
 
 	args := flag.Args()
 	if len(args) != 1 {
