@@ -9,7 +9,7 @@ import (
 	"github.com/pengdaCN/goverter"
 )
 
-var version = "v1.0.6"
+var version = "v1.0.7"
 
 func main() {
 	packageName := flag.String("packageName", "generated", "")

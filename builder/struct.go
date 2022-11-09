@@ -138,6 +138,7 @@ func (z *ZeroCopyStruct) Build(gen Generator, ctx *MethodContext, sourceID *xtyp
 			err             *Error
 			ok              bool
 			sourceIsPtr     bool
+			nextIsPtr       bool
 			_nextSource     *xtype.Type
 			_nextTarget     *xtype.Type
 			enabledZeroCopy bool
@@ -151,6 +152,10 @@ func (z *ZeroCopyStruct) Build(gen Generator, ctx *MethodContext, sourceID *xtyp
 
 			if nextSource.Pointer {
 				sourceIsPtr = true
+			}
+
+			if nextTarget.Pointer {
+				nextIsPtr = true
 			}
 
 			goto assignStmt
@@ -191,6 +196,14 @@ func (z *ZeroCopyStruct) Build(gen Generator, ctx *MethodContext, sourceID *xtyp
 		ctx.WantMethodKind = xtype.InSourceIn2Target
 
 	assignStmt:
+		if nextIsPtr {
+			ifStmt := jen.If(targetFieldRef.Clone().Op("==").Nil()).Block(
+				targetFieldRef.Clone().Op("=").New(nextTarget.TypeAsJen()),
+			)
+
+			fieldStmt = append([]jen.Code{ifStmt}, fieldStmt...)
+		}
+
 		if sourceIsPtr {
 			if fieldID != nil {
 				fieldStmt = append(fieldStmt, targetFieldRef.Clone().Op("=").Add(fieldID.Code))
