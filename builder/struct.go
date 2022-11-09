@@ -198,7 +198,7 @@ func (z *ZeroCopyStruct) Build(gen Generator, ctx *MethodContext, sourceID *xtyp
 	assignStmt:
 		if nextIsPtr {
 			ifStmt := jen.If(targetFieldRef.Clone().Op("==").Nil()).Block(
-				targetFieldRef.Clone().Op("=").New(nextTarget.TypeAsJen()),
+				targetFieldRef.Clone().Op("=").New(nextTarget.PointerInner.TypeAsJen()),
 			)
 
 			fieldStmt = append([]jen.Code{ifStmt}, fieldStmt...)
